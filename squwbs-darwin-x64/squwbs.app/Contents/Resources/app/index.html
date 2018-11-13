@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    
+    <title>squwbs</title>
+    <style>
+      #referenceButton{
+        top: 1px;
+        bottom:1px;
+        width: 100%;
+        clear: both;
+        margin: 2px;
+        text-align:center;
+        padding:2px;
+      }
+      #mainButton{
+        top: 1px;
+        bottom:1px;
+        width: 100%;
+        clear: both;
+        margin: 2px;
+        text-align:center;
+        padding:2px;
+      }
+      #third{
+        top:5px;
+        width: 100%;
+        clear: both;
+        margin: 2px;
+        text-align:center;
+      }
+      #read{
+        margin-top:5px;
+        margin-left:0px;
+        margin-right:0px;
+        margin-bottom:2px;
+        width: 100%;
+        text-align:center;
+        padding:2px;
+        
+      }
+      #cancel{
+        width: 100%;
+        text-align:center;
+        padding:2px;
+        margin-top:1px;
+        margin-left:0px;
+        margin-right:0px;
+        margin-bottom:1px;
+      }
+      #targetEmail{
+        width:100%;
+        clear: both;
+        margin: auto;
+        text-align:center;
+        display:flex;
+        flex-direction:row;
+        padding:2px;
+        margin:2px;
+        bottom:1px;
+      }
+    </style>
+  </head>
+  <body>
+  <div>
+    <div id='first'>
+      <button id = "referenceButton" onclick="document.getElementById('referencefile').click(); return false;">Reference Track</button>
+    </div>
+    <div id='second'>
+      <button id = "mainButton" onclick="document.getElementById('mainfile').click(); return false;">Original Track</button>
+    </div>
+  </div>
+    <!--
+    <input type="email" id="targetemail" placeholder="email@example.com"/>
+  -->
+
+    <div class='row'id='third'>
+    <input type="email" id="targetemail" placeholder="e-mail@address.com"/>
+    <button class="waves-effect waves-light col s6" id='read' onclick="readButtonPressed();">Read</button>
+    <button class="waves-effect waves-light col s6" id='cancel' onclick="abortRead();">Cancel</button>
+    </div>
+    <div>
+    <input type="file" id="referencefile" style = 'visibility:hidden' name ="Reference Track" name="file"/>
+    <input type="file" id ="mainfile" style = 'visibility:hidden' name ="Your Track"name ="file" multiple/>
+    </div>
+
+  </body>
+  <script src="static/js/wavefile.umd.js"></script>
+  <script src="static/js/materialize.js"></script>
+  <script src="static/js/logic.js"></script>
+  <script>
+    document.getElementById('referencefile').addEventListener('change', handleReferenceFileSelect, false);
+    document.getElementById('mainfile').addEventListener('change', handleMainFileSelect, false);
+  </script>
+</html>

@@ -1,0 +1,22 @@
+{
+  "name": "squwbs",
+  "version": "1.0.0",
+  "description": "A minimal Electron application",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "repository": "https://github.com/bgamut/",
+  "keywords": [
+    "Electron",
+    "demo"
+  ],
+  "author": "GitHub",
+  "license": "CC0-1.0",
+  "devDependencies": {
+    "electron": "^3.0.4"
+  },
+  "dependencies": {
+    "wavefile": "^8.4.4"
+  }
+}
