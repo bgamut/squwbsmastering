@@ -60,6 +60,14 @@
         margin:2px;
         bottom:1px;
       }
+      #console{
+        font-family:'Lucida Grande';
+        width:90%;
+        margin-top:5px;
+        text-align:left;
+        color:white;
+        font-size:10px;
+      }
     </style>
   </head>
   <body>
@@ -79,7 +87,9 @@
     <input type="email" id="targetemail" placeholder="e-mail@address.com"/>
     <button class="waves-effect waves-light col s6" id='read' onclick="readButtonPressed();">Read</button>
     <button class="waves-effect waves-light col s6" id='cancel' onclick="abortRead();">Cancel</button>
+    
     </div>
+    <a id='console'>Please Enter Your Email To Get The Master File</a>
     <div>
     <input type="file" id="referencefile" style = 'visibility:hidden' name ="Reference Track" name="file"/>
     <input type="file" id ="mainfile" style = 'visibility:hidden' name ="Your Track"name ="file" multiple/>

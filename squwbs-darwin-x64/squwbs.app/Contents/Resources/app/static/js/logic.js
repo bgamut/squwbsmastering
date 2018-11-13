@@ -28,7 +28,7 @@ var referenceFileSelect = function(evt){
     // Reset progress indicator on new file selection.
     //progress.style.width = '0%';
     //progress.textContent = '0%';
-    console.log('reference file read started');
+    document.getElementById('console').innerHTML=('reference file read started');
     reader = new FileReader();
     reader.readAsArrayBuffer(evt.target.files[0]);
     reader.onerror = errorHandler;
@@ -56,7 +56,7 @@ var referenceFileSelect = function(evt){
         stringwise.push((intBuffer[i]&0x0000ffff).toString(16));
         stringwise.push(((intBuffer[i]&0xffff0000)>>16).toString(16));
     };
-    console.log("file read is done ");
+    document.getElementById('console').innerHTML=("file read is done ");
     referenceBufferSampleRate=intBuffer[6];
     var channels=bitwise[11];
     var bitrate = intBuffer[7]/referenceBufferSampleRate/channels*8;
@@ -262,7 +262,7 @@ var finalFrontier = new Promise(function(resolve,reject){
 var readButtonPressed = function(){
 finalFrontier.then(function(val){ 
     tabulation()
-    console.log('initiating json data sending')
+    document.getElementById('console').innerHTML=('initiating json data sending')
     var JSONdata = reconstruct(mainTable,referenceTable,44100);
     if(document.getElementById('targetemail')!==""){
         setTargetAddress();
@@ -512,7 +512,7 @@ function table(left, right, originalSampleRate){
     // transform left/right to mono/side with zero padding
 
     for (var i =0; i<origLength; i++){
-        console.log('mono side split : ' + i + ' / '+origLength)
+        document.getElementById('console').innerHTML=('ms split:' + i + '/'+origLength)
         mono[i] = (left[i]+right[i])/2;
         side[i] = left[i]-mono;
     };
@@ -526,6 +526,7 @@ function table(left, right, originalSampleRate){
             sideMatrix[i][j]=tempSide
             monoMeanMatrix[i]+=Math.abs(tempMono)/origLength
             sideMeanMatrix[i]+=Math.abs(tempSide)/origLength
+            document.getElementById('console').innerHTML='mean:' + i+'/'+barkscale.length + '-'+j+'/'+origLength;
         }
     }
     else if(i==barkscale.length-1){
@@ -536,6 +537,7 @@ function table(left, right, originalSampleRate){
             sideMatrix[i][j]=tempSide
             monoMeanMatrix[i]+=Math.abs(tempMono)/origLength
             sideMeanMatrix[i]+=Math.abs(tempSide)/origLength
+            document.getElementById('console').innerHTML='mean:' + i+'/'+barkscale.length + '-'+j+'/'+origLength;
         }
     }
     else{
@@ -546,6 +548,7 @@ function table(left, right, originalSampleRate){
             sideMatrix[i][j]=tempSide
             monoMeanMatrix[i]+=Math.abs(tempMono)/origLength
             sideMeanMatrix[i]+=Math.abs(tempSide)/origLength
+            document.getElementById('console').innerHTML='mean:' + i+'/'+barkscale.length + '-'+j+'/'+origLength;
         }
     }
     
@@ -554,7 +557,7 @@ function table(left, right, originalSampleRate){
         for (var j = 0; j<origLength; j++){
             monoDeviationMatrix[i] +=  (Math.abs(monoMatrix[i][j])-monoMeanMatrix[i])/origLength;
             sideDeviationMatrix[i] +=  (Math.abs(sideMatrix[i][j])-sideMeanMatrix[i])/origLength;
-            
+            document.getElementById('console').innerHTML='dev:' + i+'/'+barkscale.length + '-'+j+'/'+origLength; 
         }
     }
   
@@ -576,7 +579,7 @@ function table(left, right, originalSampleRate){
 };
     
 function reconstruct(signalTable,referenceTable,desiredSampleRate){
-    
+    document.getElementById('console').innerHTML='reconstruct';
     var newLength=signalTable.newLength;
     
     function ratio(bins){
@@ -588,6 +591,7 @@ function reconstruct(signalTable,referenceTable,desiredSampleRate){
     var ratio = new ratio(bins);
     
     for (var i =0; i<bins; i++){
+        document.getElementById('console').innerHTML=i+'/'+bins;
         ratio.mono[i]=referenceTable.monoDeviationMatrix[i]/signalTable.monoDeviationMatrix[i];
         ratio.side[i]=referenceTable.sideDeviationMatrix[i]/signalTable.sideDeviationMatrix[i];
     };
@@ -622,10 +626,11 @@ function reconstruct(signalTable,referenceTable,desiredSampleRate){
             else if(signalTable.sideMatrix[i][j]<=0){
                 tempSide += (signalTable.sideMatrix[i][j]+signalTable.sideMeanMatrix[i])*ratio.side[i]-referenceTable.sideMeanMatrix[i]
             }  
-        }    
+        } 
+        document.getElementById('console').innerHTML=j+'/'+signalTable.origLength+'-'+i+'/'+bins;   
     }
-    data.left[i]=tempMono+tempSide
-    data.right[i]=tempMono-tempSide
+    data.left[j]=tempMono+tempSide
+    data.right[j]=tempMono-tempSide
     }
 
     var newLeft = SRConverter(data.left,44100,desiredSampleRate);
@@ -657,6 +662,7 @@ function reconstruct(signalTable,referenceTable,desiredSampleRate){
 
 };
 function send_data_to_server(data){
+    document.getElementById('console').innerHTML='sending data to email address';
     var request = new XMLHttpRequest();
 
     "url needs to be updated once flask is deployed"
@@ -664,5 +670,6 @@ function send_data_to_server(data){
     request.open('POST','bernardahn.pythonanywhere.com',true);
     request.setRequestHeader("content-type","application/json");
     request.send(data);
+    document.getElementById('console').innerHTML='done! please check your email';
 };
     
