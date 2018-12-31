@@ -1,8 +1,9 @@
-var {ipcRenderer,remote} = require('electron')
+var {ipcRenderer,remote,app} = require('electron')
 var dialog = remote.dialog
 var fs = require('fs')
 var WaveFile =require('wavefile')
 var path = require('path')
+var spawn=require('child_process').spawn
 var content = 'some text to save into the file'
 var pathlist
 var itemslist=[]
@@ -20,9 +21,12 @@ originalTrackButton.style.display = 'none'
 readButton.style.display='none'
 cancelButton.style.display='none'
 var fileList = new Array;
-var pathWin = new Array;
+var saveDirectory = "";
+/*
+btw 
+var filename = path.parse(fullpath).base;
+*/
 var getPath = function(pathString){
-    pathWin=pathString
     fs.readdir(pathString,(err,items)=>{
         for (var j in items){
             var extendedPath =path.join(pathString,items[j])
@@ -39,8 +43,32 @@ var getPath = function(pathString){
     })
             
 }
+
 var openWindow =function(){
-    dialog.showOpenDialog({properties:['openFile','openDirectory','multiSelections']},(pathlist)=>{
+    
+    /*
+    var defPath="/"
+    fs.readdir('/users',(err,restOfThePath)=>{
+        console.log(restOfThePath)
+        for (var i =restOfThePath.length-1; i>-1; i--){
+            if(restOfThePath[i].startsWith(".")||restOfThePath[i]=="Guest"||restOfThePath[i]=="Shared"){
+                restOfThePath.splice(i,1);
+            }
+        }
+        if(restOfThePath[0]){
+            console.log(restOfThePath[0]) 
+            defPath = '/users/'+restOfThePath[0]
+        }
+        else{
+            defPath='/users'
+        }
+    })
+    
+    defPath = app.getPath('Download')
+    console.log(defPath)
+    dialog.showOpenDialog({title:'Choose Save Directory',defaultPath:defPath,properties:['openFile','openDirectory','multiSelections','createDirectory','promptToCreate']},(pathlist)=>{
+    */
+   dialog.showOpenDialog({title:'Choose Save Directory',properties:['openFile','openDirectory','multiSelections','createDirectory','promptToCreate']},(pathlist)=>{
         console.log(pathlist)
         if(pathlist!==undefined){
             for (var i in pathlist){
@@ -52,16 +80,22 @@ var openWindow =function(){
 }
 //openWindow()
 var saveWindow=function(){
-    dialog.showSaveDialog({title:'where would you like the save the file?',message:'where would you like the save the file?'},(fileName)=>{
-        if(fileName===undefined){
+    dialog.showOpenDialog({properties:['openDirectory','createDirectory','promptToCreate'],title:'where would you like the save the file?',message:'where would you like the save the file?'},(pathName)=>{
+        if(pathName===undefined){
             console.log("you didn't save the file")
         }
+        else{
+            console.log(pathName)
+            saveDirectory=pathName;
+        }
+        /*
         fs.writeFile(fileName,content,(err)=>{
             if(err){
                 alert('An error ocurred creating the file')
             }
             alert('The file has been saved')
         })
+        */
     })
 }
 var print = function(line){
@@ -100,7 +134,7 @@ var mainBitsPerSample
 var mainOnline = false
 */
 var targetaddress=null
-var barkscale = [0,150,200,19500]
+var barkscale = [175,2750,19500]
 function LP(freq,sr){
     this.buf0 = 0
     this.buf1 = 0
@@ -181,7 +215,7 @@ function track(){
     track.prototype.bufferMono=new Array();
     track.prototype.bufferRightOnly=new Array();
     track.prototype.bufferLeftOnly=new Array();
-    track.prototype.bufferSampleRate=0;
+    track.prototype.sampleRate=0;
     track.prototype.maxNumber=0;
     track.prototype.monoMean=0;
     track.prototype.sideMean=0;
@@ -205,68 +239,70 @@ function track(){
     track.prototype.eight=null;
     track.prototype.onesix=null;
     track.prototype.twofour=null;
-    track.prototype.monoMatrix=null;
-    track.prototype.sideMatrix=null;
-    track.prototype.monoHPMatrix=null;
-    track.prototype.sideHPMatrix=null;
-    track.prototype.monoLPMatrix=null;
-    track.prototype.sideLPMatrix=null;
-    track.prototype.monoMeanMatrix=null;
-    track.prototype.sideMeanMatrix=null;
-    track.prototype.monoDeviationMatrix=null;
-    track.prototype.sideDeviationMatrix=null;
-    track.prototype.newMatrix = function(barkscale){
-        for (var i =0; i<barkscale.length; i++){
-            track.monoMatrix[i] =new Array(track.sampleLength);
-            track.sideMatrix[i] = new Array(track.sampleLength);
-            track.monoHPMatrix[i]=new HP(barkscale[i],track.sampleRate)
-            track.sideHPMatrix[i]=new HP(barkscale[i],track.sampleRate)
-            track.monoLPMatrix[i]=new LP(barkscale[i],track.sampleRate)
-            track.sideLPMatrix[i]=new LP(barkscale[i],track.sampleRate)
-            track.monoMeanMatrix[i]=0.0
-            track.sideMeanMatrix[i]=0.0
-            track.monoDeviationMatrix[i]=0.0
-            track.sideDeviationMatrix[i]=0.0
+    track.prototype.monoHPArray=new Array(barkscale.length);
+    track.prototype.sideHPArray=new Array(barkscale.length);
+    track.prototype.monoLPArray=new Array(barkscale.length);
+    track.prototype.sideLPArray=new Array(barkscale.length);
+    track.prototype.monoMatrix=new Array(barkscale.length+1);
+    track.prototype.sideMatrix=new Array(barkscale.length+1);
+    track.prototype.monoMeanArray=new Array(barkscale.length+1);
+    track.prototype.sideMeanArray=new Array(barkscale.length+1);
+    track.prototype.monoDeviationArray=new Array(barkscale.length+1);
+    track.prototype.sideDeviationArray=new Array(barkscale.length+1);
+    track.prototype.newMatrix = function(){
+        for (var i =0; i<barkscale.length+1; i++){
+            this.monoMatrix[i] =new Array(this.sampleLength);
+            this.sideMatrix[i] = new Array(this.sampleLength);
+            this.monoMeanArray[i]=0.0
+            this.sideMeanArray[i]=0.0
+            this.monoDeviationArray[i]=0.0
+            this.sideDeviationArray[i]=0.0
+            if(i<barkscale.length){
+                this.monoHPArray[i]=new HP(barkscale[i],this.sampleRate)
+                this.sideHPArray[i]=new HP(barkscale[i],this.sampleRate)
+                this.monoLPArray[i]=new LP(barkscale[i],this.sampleRate)
+                this.sideLPArray[i]=new LP(barkscale[i],this.sampleRate)
+            }
         }
     }
-    track.prototype.enterTheMatrix=function(barkscale){
-        for (var i =0; i<barkscale.length; i++){
+    track.prototype.enterTheMatrix=function(){
+        for (var i =0; i<barkscale.length+1; i++){
             if (i==0){
-                for (var j = 0; j<track.sampleLength; j++){
-                    var tempMono =track.monoLPMatrix[i+1].process(track.mono[j])
-                    var tempSide =track.sideLPMatrix[i+1].process(track.leftOnly[j])
-                    track.monoMatrix[i][j]=tempMono
-                    track.sideMatrix[i][j]=tempSide
-                    track.monoMeanMatrix[i]+=Math.abs(tempMono)/track.sampleLength
-                    track.sideMeanMatrix[i]+=Math.abs(tempSide)/track.sampleLength
+                for (var j = 0; j<this.sampleLength; j++){
+                    var tempMono =this.monoLPArray[i].process(track.mono[j])
+                    var tempSide =this.sideLPArray[i].process(track.leftOnly[j])
+                    this.monoMatrix[i][j]=tempMono
+                    this.sideMatrix[i][j]=tempSide
+                    this.monoMeanArray[i]+=Math.abs(tempMono)/this.sampleLength
+                    this.sideMeanArray[i]+=Math.abs(tempSide)/this.sampleLength
                 }
             }
-            else if(i==barkscale.length-1){
-                for (var j = 0; j<track.sampleLength; j++){
-                    var tempMono =track.monoHPMatrix[i].process(track.mono[j])
-                    var tempSide =track.sideHPMatrix[i].process(track.leftOnly[j])
-                    track.monoMatrix[i][j]=tempMono
-                    track.sideMatrix[i][j]=tempSide
-                    track.monoMeanMatrix[i]+=Math.abs(tempMono)/track.sampleLength
-                    track.sideMeanMatrix[i]+=Math.abs(tempSide)/track.sampleLength
+            else if(i==barkscale.length){
+                for (var j = 0; j<this.sampleLength; j++){
+                    var tempMono =this.monoHPArray[i].process(track.mono[j])
+                    var tempSide =this.sideHPArray[i].process(track.leftOnly[j])
+                    this.monoMatrix[i][j]=tempMono
+                    this.sideMatrix[i][j]=tempSide
+                    this.monoMeanArray[i]+=Math.abs(tempMono)/track.sampleLength
+                    this.sideMeanArray[i]+=Math.abs(tempSide)/track.sampleLength
                 }
             }
             else{
                 for (var j = 0; j<track.sampleLength; j++){
-                    var tempMono = track.monoLPMatrix[i+1].process(track.monoHPMatrix[i].process(track.mono[j]))
-                    var tempSide = track.sideLPMatrix[i+1].process(track.sideHPMatrix[i].process(track.leftOnly[j]))
+                    var tempMono = track.monoLPArray[i].process(track.monoHPArray[i-1].process(track.mono[j]))
+                    var tempSide = track.sideLPArray[i].process(track.sideHPArray[i-1].process(track.leftOnly[j]))
                     track.monoMatrix[i][j]=tempMono
                     track.sideMatrix[i][j]=tempSide
-                    track.monoMeanMatrix[i]+=Math.abs(tempMono)/track.sampleLength
-                    track.sideMeanMatrix[i]+=Math.abs(tempSide)/track.sampleLength
+                    track.monoMeanArray[i]+=Math.abs(tempMono)/track.sampleLength
+                    track.sideMeanArray[i]+=Math.abs(tempSide)/track.sampleLength
                 }
             }
             
             }
             for (var i =0; i<barkscale.length; i++){
                 for (var j = 0; j<track.sampleLength; j++){
-                    track.monoDeviationMatrix[i] +=  (Math.abs(track.monoMatrix[i][j])-track.monoMeanMatrix[i])/track.sampleLength;
-                    track.sideDeviationMatrix[i] +=  (Math.abs(track.sideMatrix[i][j])-track.sideMeanMatrix[i])/track.sampleLength;
+                    track.monoDeviationArray[i] +=  (Math.abs(track.monoMatrix[i][j])-track.monoMeanArray[i])/track.sampleLength;
+                    track.sideDeviationArray[i] +=  (Math.abs(track.sideMatrix[i][j])-track.sideMeanArray[i])/track.sampleLength;
                 }
             }
     }
@@ -555,6 +591,46 @@ function originalTrackSelect(evt){
         }
     }
 };
+/*
+function selectSaveDirectory(){
+    var dialog = spawn("python",[./static/python/directoryDialog.py])
+    dialog.stdout.on('data',function(data){saveDirectory=new TextDecoder('utf-8').decode(data)})
+}
+*/
+/*
+function selectSaveDirectory(){
+    var dialog = spawn("./static/python/dist/directoryDialog")
+    dialog.stdout.on('data',function(data){saveDirectory=new TextDecoder('utf-8').decode(data)})
+}
+*/
+/*
+function selectSaveDirectory(){
+    var {PythonShell} =require('python-shell');
+    var options = {
+        mode:'text',
+        pythonOptions:['-u'],
+        pythonPath:'/Users/bernardahn/anaconda3/bin/python',
+        scriptPath:__dirname+'/static/python/'
+    }
+    
+   PythonShell.runString("import tkinter from tkinter.filedialog; import askdirectory; root = tkinter.Tk();  root.withdraw(); folder = askdirectory(parent=root,initialdir='/',title='Please select a directory to save your files.'); print(folder);", options, function (err, results) {
+    console.log(results)
+  });
+}
+*/
+/*
+function SaveButtonPressed(evt){
+    document.getElementById('saveDirectory').addEventListener('change',readFile,false);
+    function readFile(evt){
+        fileSelect(evt,mainObj)
+        if(referenceObj.online==true){
+            mainObj.enterTheMatrix(barkscale)
+            referencObj.enterTheMatrix(barkscale)
+            reconstruct()
+        }
+    }
+}
+*/
 /*
 var handleMainFileSelect=function(evt){
     mainFileSelect(evt).then(function(val){
