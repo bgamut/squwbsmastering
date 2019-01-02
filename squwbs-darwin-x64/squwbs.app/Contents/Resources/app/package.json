@@ -17,6 +17,10 @@
     "electron": "^3.0.4"
   },
   "dependencies": {
+    "electron-notification-state": "^1.0.4",
+    "electron-reload": "^1.4.0",
+    "pcm": "^1.0.3",
+    "python-shell": "^1.0.7",
     "wavefile": "^8.4.4"
   }
 }

@@ -11,7 +11,7 @@ require('electron-reload')(__dirname,{
 app.on('ready', () => {  
   const {width,height} =  electron.screen.getPrimaryDisplay().workAreaSize
   //const win= new BrowserWindow({frame:false,resizeable:true, x:width-148,y:0,width:148, minWidth:148,maxWidth:148,height:200,minHeight:200,maxHeight:200,useContentSize:true,opacity:0.95, transparent:false, title:'squwbs',appIcon:__dirname + '/static/img/tray_icon.png',titleBarStyle:"default"})
-  const win= new BrowserWindow({frame:true,resizeable:true, x:width-148,y:0,width:800, height:600,useContentSize:true,opacity:0.95, transparent:false, title:'squwbs',appIcon:__dirname + '/static/img/tray_icon.png',titleBarStyle:"default"})
+  const win= new BrowserWindow({frame:true,resizeable:true, x:width-148,y:0,width:450, height:300,useContentSize:true,opacity:0.95, transparent:false, title:'squwbs',appIcon:__dirname + '/static/img/tray_icon.png',titleBarStyle:"default"})
   win.loadFile('index.html')
   
   ipcMain.on('print',function(event,line){

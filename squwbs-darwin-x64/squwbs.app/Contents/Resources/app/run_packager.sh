@@ -1,1 +1,1 @@
-electron-packager . --icon=/Users/bernardahn/Desktop/development/software/webapp/squwbs\ mastering/static/icons/squwbs.icns
+electron-packager . --overwrite --electron=4.0.0 --icon=/Users/bernardahn/Desktop/development/software/webapp/squwbsmastering/static/icons/squwbs.icns
