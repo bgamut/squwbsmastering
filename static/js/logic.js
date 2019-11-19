@@ -331,8 +331,8 @@ function track(){
     track.prototype.monoDeviationArray=new Array(barkscale.length+1);
     track.prototype.sideDeviationArray=new Array(barkscale.length+1);
     track.prototype.newMatrix = function(){
-        this.mono = SRConverter(this.bufferMono,this.bufferSampleRate,44100)
-        this.leftOnly=SRConverter(this.bufferLeftOnly,this.bufferSampleRate,44100)
+        //this.mono = SRConverter(this.bufferMono,this.bufferSampleRate,44100)
+        //this.leftOnly=SRConverter(this.bufferLeftOnly,this.bufferSampleRate,44100)
         this.sampleLength=this.mono.length
         for (var i =0; i<barkscale.length+1; i++){
             this.monoMatrix[i] =new Array(this.mono.length);
@@ -356,8 +356,11 @@ function track(){
         for (var i =0; i<barkscale.length+1; i++){
             if (i==0){
                 for (var j = 0; j<this.sampleLength; j++){
-                    this.monoMean+=Math.abs(this.mono[j])/this.sampleLength
-                    this.sideMean+=Math.abs(this.leftOnly[j])/this.sampleLength
+                    
+                    this.monoMean+=Math.floor(Math.abs(this.bufferMono[j])/this.sampleLength)
+                    //console.log(Math.abs(this.leftOnly[j]))
+                    this.sideMean+=Math.floor(Math.abs(this.leftOnly[j])/this.sampleLength)
+                    
                     var monoLP = this.monoLPArray[i]
                     var sideLP = this.sideLPArray[i]
                     var tempMono =monoLP.process(this.mono[j])
@@ -517,9 +520,22 @@ function fileSelect(evt,obj){
             //console.log(wav)
             wav.toBitDepth(32)
             //console.log(wav)
+            obj.monoHPArray=new Array(barkscale.length);
+            obj.sideHPArray=new Array(barkscale.length);
+            obj.monoLPArray=new Array(barkscale.length);
+            obj.sideLPArray=new Array(barkscale.length);
+            obj.monoMatrix=new Array(barkscale.length+1);
+            obj.sideMatrix=new Array(barkscale.length+1);
+            obj.monoMeanArray=new Array(barkscale.length+1);
+            obj.sideMeanArray=new Array(barkscale.length+1);
+            obj.monoDeviationArray=new Array(barkscale.length+1);
+            obj.sideDeviationArray=new Array(barkscale.length+1);
+            obj.monoMean=0
+            obj.sideMean=0
             obj.bufferLeft = []
             obj.bufferRight = []
             obj.bufferMono=[]
+            obj.bufferLeftOnly=[]
             obj.leftOnly=[]
             obj.mono=[]
             obj.sampleLength=wav.data.samples.length/8
@@ -547,9 +563,6 @@ function fileSelect(evt,obj){
                 obj.mono.push(mono)
                 obj.bufferMono.push(mono)
                 var leftOnly=obj.bufferLeft[i]-mono
-                if(typeof(leftOnly)!='number'){
-                    console.log(leftOnly)
-                }
                 obj.bufferLeftOnly.push(leftOnly)
                 obj.leftOnly.push(leftOnly)
                 //console.log(obj.bufferLeftOnly)
@@ -886,15 +899,15 @@ function reconstruct(mainObj,referenceObj,desiredSampleRate){
         this.mono=new Array(bins);
         this.side=new Array(bins);
     };
-    console.log('referenceObj : '+stringifyObject(referenceObj))
-    console.log('mainObj : '+stringifyObject(mainObj))
+    //console.log('referenceObj : '+stringifyObject(referenceObj))
+    //console.log('mainObj : '+stringifyObject(mainObj))
     var ratio = new ratio(barkscale.length);
     for (var i =0; i<barkscale.length; i++){
         document.getElementById('console').innerHTML=i+'/'+barkscale.length;
         ratio.mono[i]=referenceObj.monoDeviationArray[i]/mainObj.monoDeviationArray[i];
         ratio.side[i]=referenceObj.sideDeviationArray[i]/mainObj.sideDeviationArray[i];
     };
-    console.log('ratio matrix : ',stringifyObject(ratio))
+    //console.log('ratio matrix : ',stringifyObject(ratio))
     function soundData(){
         this.left = new Array(mainObj.leftOnly.length);
         this.right = new Array(mainObj.leftOnly.length);
@@ -934,9 +947,10 @@ function reconstruct(mainObj,referenceObj,desiredSampleRate){
     var mainWav = new WaveFile(fs.readFileSync(mainObj.filePath.path))
     var refWav = new WaveFile(fs.readFileSync(refObj.filePath.path))
     */
-    var newLeft = SRConverter(data.left,44100,desiredSampleRate);
-    var newRight = SRConverter(data.right,44100,desiredSampleRate);
-    
+    //var newLeft = SRConverter(data.left,44100,desiredSampleRate);
+    //var newRight = SRConverter(data.right,44100,desiredSampleRate);
+    var newLeft=data.left
+    var newRight=data.right
     for(var i=0; i<newLeft.length; i++){
         //console.log(newLeft[i])
         data.interlaced.push(newLeft[i])
@@ -951,10 +965,21 @@ function reconstruct(mainObj,referenceObj,desiredSampleRate){
                 document.getElementById('console').innerHTML=err
             }
           }
-    
+    var max = 0
+    for(var i=0; i<data.interlaced.length; i++){
+        if(max<Math.abs(data.interlaced[i])){
+            max=data.interlaced[i]
+        }
+    }
+    for(var i=0; i<data.interlaced.length; i++){
+
+        data.interlaced[i]=Math.floor(data.interlaced[i]*16384/max)
+        
+    }
+    console.log(data.interlaced)
     var fullPathName=fullPathDirectory+path.basename(mainObj.filePath)
     var wav = new WaveFile()
-    wav.fromScratch(2,desiredSampleRate,'32f',[data.interlaced])
+    wav.fromScratch(2,desiredSampleRate,'16',[data.interlaced])
     console.log(fullPathName)
     fs.writeFileSync(fullPathName,wav.toBuffer())
     //document.getElementById('console').innerHTML='check the file dude'
