@@ -4,6 +4,8 @@ var fs = require('fs')
 var WaveFile =require('wavefile')
 var path = require('path')
 var spawn=require('child_process').spawn
+const stringifyObject = require('stringify-object');
+
 var content = 'some text to save into the file'
 var pathlist
 var itemslist=[]
@@ -15,6 +17,7 @@ var originalTrackButton = document.getElementById('originalButton');
 var readButton = document.getElementById('read');
 var cancelButton = document.getElementById('cancel');
 var wav = require('wav')
+
 
 //consoleContainer.style.display='none'
 targetEmail.style.display = 'none'
@@ -31,19 +34,27 @@ var filename = path.parse(fullpath).base;
 function cubicSpline(x,y,ratio){
 
     var n=x.length-1;
-    var h = new Float32Array(n);
+    //var h = new Float32Array(n);
+    var h = new Array(n)
+    // console.log(ratio)
+    // console.log(y.length)
     var newLength = y.length*ratio;
     for (var i=0; i<n; i++){
         h[i]=x[i+1]-x[i];
     };
-    var al = new Float32Array(n-1);
+
+    //var al = new Float32Array(n-1);
+    var al = new Array(n-1);
     for (var i=1; i<n; i++){
         al[i]=3*((y[i+1]-y[i])/h[i] - (y[i]-y[i-1])/h[i-1]);
     };
     al[0]=0;
-    var l = new Float32Array(n+1);
-    var u = new Float32Array(n+1);
-    var z = new Float32Array(n+1);
+    // var l = new Float32Array(n+1);
+    // var u = new Float32Array(n+1);
+    // var z = new Float32Array(n+1);
+    var l = new Array(n+1);
+    var u = new Array(n+1);
+    var z = new Array(n+1);
     l.fill(1);
     u.fill(0);
     z.fill(0);
@@ -52,9 +63,12 @@ function cubicSpline(x,y,ratio){
         u[i] = h[i]/l[i];
         z[i] = (al[i] - h[i-1]*z[i-1])/l[i];
     };
-    var b = new Float32Array(n+1);
-    var c = new Float32Array(n+1);
-    var d = new Float32Array(n+1);
+    // var b = new Float32Array(n+1);
+    // var c = new Float32Array(n+1);
+    // var d = new Float32Array(n+1);
+    var b = new Array(n+1);
+    var c = new Array(n+1);
+    var d = new Array(n+1);
     l.fill(0);
     u.fill(0);
     z.fill(0);
@@ -64,8 +78,10 @@ function cubicSpline(x,y,ratio){
         d[i] = (c[i+1]-c[i])/(3*h[i]);
     };
     var result = [y, b, c, d];
-    var xs = new Float32Array(newLength);
-    var ys = new Float32Array(newLength);
+    // var xs = new Float32Array(newLength);
+    // var ys = new Float32Array(newLength);
+    var xs = new Array(newLength);
+    var ys = new Array(newLength);
     var coi;
     for(var i =0; i<newLength; i++){
         xs[i]=i/ratio;
@@ -77,8 +93,12 @@ function cubicSpline(x,y,ratio){
 //returns a new array with a given sample rate
 function SRConverter(origArray,origSR,newSR){
     var ratio = newSR/origSR;
+    // console.log(newSR)
+    // console.log(origSR)
+    // console.log(ratio)
     var origLength = origArray.length;
-    var x = new Float32Array(origArray.length);
+    //var x = new Float32Array(origArray.length);
+    var x = new Array(origArray.length)
     for (var i =0; i<origLength; i++){
         x[i]=i;
     };
@@ -332,6 +352,7 @@ function track(){
     }
     track.prototype.enterTheMatrix=function(){
         this.newMatrix()
+        //console.log(this)
         for (var i =0; i<barkscale.length+1; i++){
             if (i==0){
                 for (var j = 0; j<this.sampleLength; j++){
@@ -365,6 +386,8 @@ function track(){
                     var sideHP = this.sideHPArray[i-1]
                     var monoLP = this.monoLPArray[i]
                     var sideLP = this.sideLPArray[i]
+                    //console.log(this.mono[j])
+
                     var tempMono = monoLP.process(monoHP.process(this.mono[j]))
                     var tempSide = sideLP.process(sideHP.process(this.leftOnly[j]))
                     this.monoMatrix[i][j]=tempMono
@@ -373,8 +396,10 @@ function track(){
                     this.sideMeanArray[i]+=Math.abs(tempSide)/this.sampleLength
                     this.monoVariance += Math.abs(Math.abs(this.mono[i])-this.monoMean)/this.sampleLength
                     this.sideVariance += Math.abs(Math.abs(this.leftOnly[i])-this.sideMean)/this.sampleLength
+                    //console.log(tempMono)
                 }
             }
+            
             
         }
             for (var i =0; i<barkscale.length; i++){
@@ -491,13 +516,17 @@ function fileSelect(evt,obj){
             var wav=new WaveFile(fs.readFileSync(filepath))
             //console.log(wav)
             wav.toBitDepth(32)
-            console.log(wav)
-            obj.left = []
-            obj.right = []
+            //console.log(wav)
+            obj.bufferLeft = []
+            obj.bufferRight = []
+            obj.bufferMono=[]
+            obj.leftOnly=[]
             obj.mono=[]
             obj.sampleLength=wav.data.samples.length/8
+            //console.log(wav.fmt.sampleRate)
             obj.sampleRate=wav.fmt.sampleRate
-            for (var i=0; i<wav.data.samples.length; i++){
+            obj.bufferSampleRate=wav.fmt.sampleRate
+            for (var i=0; i<obj.sampleLength; i++){
                 // obj.bufferLeft.push(eightToThreeTwo(wav.data.samples,8*i)/2147483647)
                 // obj.bufferRight.push(eightToThreeTwo(wav.data.samples,8*i+4)/2147483647)
                 obj.bufferLeft.push(eightToThreeTwo(wav.data.samples,8*i))
@@ -506,14 +535,26 @@ function fileSelect(evt,obj){
                 // obj.bufferMono.push(mono)
                 // var leftOnly=eightToThreeTwo(wav.data.samples,8*i)/2147483647-(((eightToThreeTwo(wav.data.samples,8*i)/2147483647)+eightToThreeTwo(wav.data.samples,8*i+4)/2147483647)/2.0)
                 // obj.bufferLeftOnly.push(leftOnly)
-                var mono = Math.floor(((eightToThreeTwo(wav.data.samples,8*i)/2147483647)+eightToThreeTwo(wav.data.samples,8*i+4))/2)
-                obj.bufferMono.push(mono)
-                var leftOnly=eightToThreeTwo(wav.data.samples,8*i)-mono
-                obj.bufferLeftOnly.push(leftOnly)
-                obj.monoMean+=Math.abs(mono)/(obj.sampleLength)
-                obj.sideMean+=Math.abs(leftOnly)/(obj.sampleLength)
+                // var mono = Math.floor(((eightToThreeTwo(wav.data.samples,8*i)/2147483647)+eightToThreeTwo(wav.data.samples,8*i+4))/2)
+                // obj.bufferMono.push(mono)
+               
+                //obj.monoMean+=Math.abs(mono)/(obj.sampleLength)
+                //obj.sideMean+=Math.abs(leftOnly)/(obj.sampleLength)
             };
-            console.log(obj.bufferLeftOnly)
+            for(var i = 0; i<obj.sampleLength; i++){
+                var mono = Math.floor((obj.bufferLeft[i]+obj.bufferRight[i])/2)
+                //console.log(mono)
+                obj.mono.push(mono)
+                obj.bufferMono.push(mono)
+                var leftOnly=obj.bufferLeft[i]-mono
+                if(typeof(leftOnly)!='number'){
+                    console.log(leftOnly)
+                }
+                obj.bufferLeftOnly.push(leftOnly)
+                obj.leftOnly.push(leftOnly)
+                //console.log(obj.bufferLeftOnly)
+            }
+            
             //wav.toBuffer()
             // reader.readAsArrayBuffer(files[0]);
             // reader.onerror = errorHandler;
@@ -841,21 +882,19 @@ var finalFrontier = new Promise(function(resolve,reject){
 */
 function reconstruct(mainObj,referenceObj,desiredSampleRate){
     document.getElementById('console').innerHTML='reconstruct';
-    
-    
     function ratio(bins){
         this.mono=new Array(bins);
         this.side=new Array(bins);
     };
-    console.log('referenceObj : '+referenceObj)
-    console.log('mainObj : '+mainObj)
+    console.log('referenceObj : '+stringifyObject(referenceObj))
+    console.log('mainObj : '+stringifyObject(mainObj))
     var ratio = new ratio(barkscale.length);
-    
     for (var i =0; i<barkscale.length; i++){
         document.getElementById('console').innerHTML=i+'/'+barkscale.length;
         ratio.mono[i]=referenceObj.monoDeviationArray[i]/mainObj.monoDeviationArray[i];
         ratio.side[i]=referenceObj.sideDeviationArray[i]/mainObj.sideDeviationArray[i];
     };
+    console.log('ratio matrix : ',stringifyObject(ratio))
     function soundData(){
         this.left = new Array(mainObj.leftOnly.length);
         this.right = new Array(mainObj.leftOnly.length);
@@ -863,10 +902,7 @@ function reconstruct(mainObj,referenceObj,desiredSampleRate){
         this.right.fill(0);
         this.interlaced=new Array();
     };
-
     var data= new soundData;
-
-
     for (var j =0; j<mainObj.bufferLeftOnly.length; j++){
     var tempMono = 0;
     var tempSide = 0;
@@ -902,6 +938,7 @@ function reconstruct(mainObj,referenceObj,desiredSampleRate){
     var newRight = SRConverter(data.right,44100,desiredSampleRate);
     
     for(var i=0; i<newLeft.length; i++){
+        //console.log(newLeft[i])
         data.interlaced.push(newLeft[i])
         data.interlaced.push(newRight[i])
     }
@@ -950,7 +987,8 @@ function reconstruct(mainObj,referenceObj,desiredSampleRate){
 
 var readButtonPressed = function(){
     //tabulation()
-    var desiredSampleRate = 48000
+    //var desiredSampleRate = 48000
+    var desiredSampleRate = 44100
     document.getElementById('console').innerHTML=('initiating json data sending')
     var JSONdata = reconstruct(mainObj,referenceObj,desiredSampleRate);
     /*
