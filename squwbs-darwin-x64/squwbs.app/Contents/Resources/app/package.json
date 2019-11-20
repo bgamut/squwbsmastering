@@ -18,9 +18,12 @@
   },
   "dependencies": {
     "electron-notification-state": "^1.0.4",
+    "electron-packager": "^14.1.0",
     "electron-reload": "^1.4.0",
     "pcm": "^1.0.3",
     "python-shell": "^1.0.7",
+    "stringify-object": "^3.3.0",
+    "wav": "^1.0.2",
     "wavefile": "^8.4.4"
   }
 }

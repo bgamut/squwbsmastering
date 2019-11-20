@@ -9,8 +9,32 @@
         font-family: "Lucida Sans Typewriter Regular";
         src: url("static/fonts/Lucida Sans Typewriter Regular.ttf");
       }
+      ::-webkit-scrollbar {
+          display: none;
+      }
+      html{
+        overflow-x:'hidden';
+        overflow-y:'hidden';
+        overflow:'hidden';
+      }
+      body{
+        padding-top:0;
+        padding-bottom:0;
+        padding-left:0;
+        padding-right:0;
+        overflow-x:'hidden';
+        overflow-y:'hidden';
+        padding:5px;
+      }
+      #buttonContainer{
+        display:'flex';
+        align-items: center;
+        justify-content: center;
+        width:100%;
+        height:250px;
+      }
       #referenceButton{
-        top: 1px;
+        margin-top: 3px;
         bottom:1px;
         width: 100%;
         clear: both;
@@ -33,15 +57,29 @@
         margin: 2px;
         text-align:center;
       }
-      #read{
+      #fourth{
+        top:5px;
+        width: 100%;
+        clear: both;
+        margin: 2px;
+        text-align:center;
+      }
+      #fifth{
         margin-top:0px;
         margin-left:0px;
         margin-right:0px;
         margin-bottom:2px;
         width: 100%;
         text-align:center;
-        padding:2px;
+        /* padding:2px; */
         
+      }
+      #read{
+        margin-top:0px;
+        margin-left:0px;
+        margin-right:0px;
+        margin-bottom:2px;
+        width: 100%;
       }
       #cancel{
         width: 100%;
@@ -76,46 +114,58 @@
       #consoleContainer{
         background-color:#eeeeee;
         color:#000000;
+        word-wrap:break-word;
         /*
         text-shadow:0px 1px #cacaca;
         */
         font-family:'Lucida Sans Typewriter Regular';
-        width:90%;
-        margin-top:5px;
-        padding-bottom: 15px;
+        width:100%;
+        height:150px;
+        margin-left:0px;
+        margin-right:0px;
+        padding: 15px;
         text-align:left;
         font-size:10px;
-        border:solid 0.5px #c4c4c4;
-        width: 134px;
-        border-radius:5px;
+        /* border:solid 0.5px #c4c4c4; */
+        /* width: 134px; */
+        /* border-radius:5px; */
         box-sizing: border-box;
         padding: 4px;
       }
-
+      #console{
+        margin-left:5px;
+        margin-right:5px;
+      }
     </style>
   </head>
   <body>
     <div id='consoleContainer'>
       <a id = 'console'>Ready.</a>
     </div>
-    <div id = 'first'>
-      <input type='email' id="targetEmail" rows='1' placeholder="E-mail@address.com"></textarea>
+    <div id= 'buttonContainer'>
+      <div id = 'first'>
+        <input type='email' id="targetEmail" rows='1' placeholder="E-mail@address.com"></textarea>
+      </div>
+        
+      <div id='second'>
+        <button id = "referenceButton" onclick="document.getElementById('referenceFile').click(); return false;">Reference Track</button>
+      </div>
+      <div id='third'>
+        <button id = "originalButton" onclick="document.getElementById('originalFile').click(); return false;">User Track</button>
+      </div>
+      <div id='fourth'>
+        <button id = "originalButton" onclick="reset();">Reset</button>
+      </div>
+      <div id='fifth'>
+        <button class="waves-effect waves-light col s6" id='read' onclick="readButtonPressed();">Create File</button>
+      </div>
     </div>
-      
-    <div id='second'>
-      <button id = "referenceButton" onclick="document.getElementById('referenceFile').click(); return false;">Reference Track</button>
-    </div>
-    <div id='third'>
-      <button id = "originalButton" onclick="document.getElementById('originalFile').click(); return false;">Original Track</button>
-    </div>
-  
     <!--
     <input type="email" id="targetemail" placeholder="email@example.com"/>
   -->
 
     <div class='row'id='fourth'>
     
-    <button class="waves-effect waves-light col s6" id='read' onclick="readButtonPressed();">Read</button>
     <button class="waves-effect waves-light col s6" id='cancel' onclick="abortRead();">Cancel</button>
     
     </div>
@@ -126,5 +176,6 @@
     </div>
 
   </body>
-  <script src="static/js/logic.js"></script>
+  <!-- <script src="static/js/logic.js"></script> -->
+  <script src="static/js/logicV2.js"></script>
 </html>

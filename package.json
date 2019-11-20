@@ -20,6 +20,7 @@
     "electron-notification-state": "^1.0.4",
     "electron-packager": "^14.1.0",
     "electron-reload": "^1.4.0",
+    "node-wav": "0.0.2",
     "pcm": "^1.0.3",
     "python-shell": "^1.0.7",
     "stringify-object": "^3.3.0",

@@ -4,6 +4,8 @@ var fs = require('fs')
 var WaveFile =require('wavefile')
 var path = require('path')
 var spawn=require('child_process').spawn
+const stringifyObject = require('stringify-object');
+
 var content = 'some text to save into the file'
 var pathlist
 var itemslist=[]
@@ -14,6 +16,8 @@ var referenceTrackButton = document.getElementById('referenceButton');
 var originalTrackButton = document.getElementById('originalButton');
 var readButton = document.getElementById('read');
 var cancelButton = document.getElementById('cancel');
+var wav = require('wav')
+
 
 //consoleContainer.style.display='none'
 targetEmail.style.display = 'none'
@@ -27,6 +31,82 @@ readButton.style.display='none'
 btw 
 var filename = path.parse(fullpath).base;
 */
+function cubicSpline(x,y,ratio){
+
+    var n=x.length-1;
+    //var h = new Float32Array(n);
+    var h = new Array(n)
+    // console.log(ratio)
+    // console.log(y.length)
+    var newLength = y.length*ratio;
+    for (var i=0; i<n; i++){
+        h[i]=x[i+1]-x[i];
+    };
+
+    //var al = new Float32Array(n-1);
+    var al = new Array(n-1);
+    for (var i=1; i<n; i++){
+        al[i]=3*((y[i+1]-y[i])/h[i] - (y[i]-y[i-1])/h[i-1]);
+    };
+    al[0]=0;
+    // var l = new Float32Array(n+1);
+    // var u = new Float32Array(n+1);
+    // var z = new Float32Array(n+1);
+    var l = new Array(n+1);
+    var u = new Array(n+1);
+    var z = new Array(n+1);
+    l.fill(1);
+    u.fill(0);
+    z.fill(0);
+    for (var i=1; i<n; i++){
+        l[i] = 2*(x[i+1]-x[i-1]) - h[i-1]*u[i-1];
+        u[i] = h[i]/l[i];
+        z[i] = (al[i] - h[i-1]*z[i-1])/l[i];
+    };
+    // var b = new Float32Array(n+1);
+    // var c = new Float32Array(n+1);
+    // var d = new Float32Array(n+1);
+    var b = new Array(n+1);
+    var c = new Array(n+1);
+    var d = new Array(n+1);
+    l.fill(0);
+    u.fill(0);
+    z.fill(0);
+    for (var i = n-1; i>=0; i--){
+        c[i] = z[i] - u[i]*c[i+1];
+        b[i] = (y[i+1]-y[i])/h[i] - h[i]*(c[i+1] + 2*c[i])/3;
+        d[i] = (c[i+1]-c[i])/(3*h[i]);
+    };
+    var result = [y, b, c, d];
+    // var xs = new Float32Array(newLength);
+    // var ys = new Float32Array(newLength);
+    var xs = new Array(newLength);
+    var ys = new Array(newLength);
+    var coi;
+    for(var i =0; i<newLength; i++){
+        xs[i]=i/ratio;
+        //coi=Math.floor(i/ratio);
+        coi=(i/ratio);
+        ys[i]=result[0][coi]+result[1][coi]*(xs[i]-coi)+result[2][coi]*(xs[i]-coi)**2+result[3][coi]*(xs[i]-coi)**3;
+    };
+    return ys;
+};
+//returns a new array with a given sample rate
+function SRConverter(origArray,origSR,newSR){
+    var ratio = newSR/origSR;
+    // console.log(newSR)
+    // console.log(origSR)
+    // console.log(ratio)
+    var origLength = origArray.length;
+    //var x = new Float32Array(origArray.length);
+    var x = new Array(origArray.length)
+    for (var i =0; i<origLength; i++){
+        x[i]=i;
+    };
+    var y = origArray;
+    var newArray = cubicSpline(x,y,ratio);
+    return newArray;
+};
 var getPath = function(pathString){
     fs.readdir(pathString,(err,items)=>{
         for (var j in items){
@@ -135,7 +215,8 @@ var mainBitsPerSample
 var mainOnline = false
 */
 var targetaddress=null
-var barkscale = [175,2750,19500]
+var barkscale = [175,2750,6000]
+//var barkscale = [0,51,127,200,270,370,440,530,640,770,950,1200,1550,19500];
 function LP(freq,sr){
     this.buf0 = 0
     this.buf1 = 0
@@ -234,6 +315,7 @@ function track(){
     track.prototype.bitrate=null;
     track.prototype.subchunk=null;
     track.prototype.bitdepth=null;
+    track.prototype.bufferSampleLength=null;
     track.prototype.sampleLength=null;
     track.prototype.bitsPerSample=null;
     track.prototype.arrayBuffer=null;
@@ -251,32 +333,43 @@ function track(){
     track.prototype.monoDeviationArray=new Array(barkscale.length+1);
     track.prototype.sideDeviationArray=new Array(barkscale.length+1);
     track.prototype.newMatrix = function(){
+        //this.mono = SRConverter(this.bufferMono,this.bufferSampleRate,44100)
+        //this.leftOnly=SRConverter(this.bufferLeftOnly,this.bufferSampleRate,44100)
+        this.sampleLength=this.mono.length
         for (var i =0; i<barkscale.length+1; i++){
-            this.monoMatrix[i] =new Array(this.sampleLength);
-            this.sideMatrix[i] = new Array(this.sampleLength);
+            this.monoMatrix[i] =new Array(this.mono.length);
+            this.sideMatrix[i] = new Array(this.mono.length);
             this.monoMeanArray[i]=0.0
             this.sideMeanArray[i]=0.0
             this.monoDeviationArray[i]=0.0
             this.sideDeviationArray[i]=0.0
             if(i<barkscale.length){
                 console.log('filterarray')
-                this.monoHPArray[i]=new HP(barkscale[i],this.bufferSampleRate)
-                this.sideHPArray[i]=new HP(barkscale[i],this.bufferSampleRate)
-                this.monoLPArray[i]=new LP(barkscale[i],this.bufferSampleRate)
-                this.sideLPArray[i]=new LP(barkscale[i],this.bufferSampleRate)
+                this.monoHPArray[i]=new HP(barkscale[i],44100)
+                this.sideHPArray[i]=new HP(barkscale[i],44100)
+                this.monoLPArray[i]=new LP(barkscale[i],44100)
+                this.sideLPArray[i]=new LP(barkscale[i],44100)
             }
         }
     }
     track.prototype.enterTheMatrix=function(){
         this.newMatrix()
+        //console.log(this)
         for (var i =0; i<barkscale.length+1; i++){
             if (i==0){
                 for (var j = 0; j<this.sampleLength; j++){
                     
+                    //this.monoMean+=Math.floor(Math.abs(this.bufferMono[j])/this.sampleLength)
+                    //console.log(Math.abs(this.leftOnly[j]))
+                    //this.sideMean+=Math.floor(Math.abs(this.leftOnly[j])/this.sampleLength)
+                    this.monoMean+=(Math.abs(this.bufferMono[j])/this.sampleLength)
+                    //console.log(Math.abs(this.leftOnly[j]))
+                    this.sideMean+=(Math.abs(this.leftOnly[j])/this.sampleLength)
+                    
                     var monoLP = this.monoLPArray[i]
                     var sideLP = this.sideLPArray[i]
-                    var tempMono =monoLP.process(this.bufferMono[j])
-                    var tempSide =sideLP.process(this.bufferLeftOnly[j])
+                    var tempMono =monoLP.process(this.mono[j])
+                    var tempSide =sideLP.process(this.leftOnly[j])
                     this.monoMatrix[i][j]=tempMono
                     this.sideMatrix[i][j]=tempSide
                     this.monoMeanArray[i]+=Math.abs(tempMono)/this.sampleLength
@@ -287,8 +380,8 @@ function track(){
                 for (var j = 0; j<this.sampleLength; j++){
                     var monoHP = this.monoHPArray[i-1]
                     var sideHP = this.sideHPArray[i-1]
-                    var tempMono =monoHP.process(this.bufferMono[j])
-                    var tempSide =sideHP.process(this.bufferLeftOnly[j])
+                    var tempMono =monoHP.process(this.mono[j])
+                    var tempSide =sideHP.process(this.leftOnly[j])
                     this.monoMatrix[i][j]=tempMono
                     this.sideMatrix[i][j]=tempSide
                     this.monoMeanArray[i]+=Math.abs(tempMono)/this.sampleLength
@@ -301,14 +394,20 @@ function track(){
                     var sideHP = this.sideHPArray[i-1]
                     var monoLP = this.monoLPArray[i]
                     var sideLP = this.sideLPArray[i]
-                    var tempMono = monoLP.process(monoHP.process(this.bufferMono[j]))
-                    var tempSide = sideLP.process(sideHP.process(this.bufferLeftOnly[j]))
+                    //console.log(this.mono[j])
+
+                    var tempMono = monoLP.process(monoHP.process(this.mono[j]))
+                    var tempSide = sideLP.process(sideHP.process(this.leftOnly[j]))
                     this.monoMatrix[i][j]=tempMono
                     this.sideMatrix[i][j]=tempSide
                     this.monoMeanArray[i]+=Math.abs(tempMono)/this.sampleLength
                     this.sideMeanArray[i]+=Math.abs(tempSide)/this.sampleLength
+                    this.monoVariance += Math.abs(Math.abs(this.mono[i])-this.monoMean)/this.sampleLength
+                    this.sideVariance += Math.abs(Math.abs(this.leftOnly[i])-this.sideMean)/this.sampleLength
+                    //console.log(tempMono)
                 }
             }
+            
             
         }
             for (var i =0; i<barkscale.length; i++){
@@ -423,171 +522,246 @@ function fileSelect(evt,obj){
         reader = new FileReader();
         if(obj.filePath!==null){
             var wav=new WaveFile(fs.readFileSync(filepath))
-            console.log(wav)
-            //wav.toBitDepth(32)
-            //wav.toBuffer()
-            reader.readAsArrayBuffer(files[0]);
-            reader.onerror = errorHandler;
-            reader.onabort = function(e) {
-            alert('File read cancelled');
+            //console.log(wav)
+            wav.toBitDepth(16)
+            //console.log(wav)
+            obj.monoHPArray=new Array(barkscale.length);
+            obj.sideHPArray=new Array(barkscale.length);
+            obj.monoLPArray=new Array(barkscale.length);
+            obj.sideLPArray=new Array(barkscale.length);
+            obj.monoMatrix=new Array(barkscale.length+1);
+            obj.sideMatrix=new Array(barkscale.length+1);
+            obj.monoMeanArray=new Array(barkscale.length+1);
+            obj.sideMeanArray=new Array(barkscale.length+1);
+            obj.monoDeviationArray=new Array(barkscale.length+1);
+            obj.sideDeviationArray=new Array(barkscale.length+1);
+            obj.monoMean=0
+            obj.sideMean=0
+            obj.bufferLeft = []
+            obj.bufferRight = []
+            obj.bufferMono=[]
+            obj.bufferLeftOnly=[]
+            obj.leftOnly=[]
+            obj.mono=[]
+            obj.sampleLength=wav.data.samples.length/8
+            //console.log(wav.fmt.sampleRate)
+            obj.sampleRate=wav.fmt.sampleRate
+            obj.bufferSampleRate=wav.fmt.sampleRate
+            for (var i=0; i<obj.sampleLength; i++){
+                // obj.bufferLeft.push(eightToThreeTwo(wav.data.samples,8*i)/2147483647)
+                // obj.bufferRight.push(eightToThreeTwo(wav.data.samples,8*i+4)/2147483647)
+                obj.bufferLeft.push(eightToThreeTwo(wav.data.samples,8*i))
+                obj.bufferRight.push(eightToThreeTwo(wav.data.samples,8*i+4))
+                // var mono = ((eightToThreeTwo(wav.data.samples,8*i)/2147483647)+eightToThreeTwo(wav.data.samples,8*i+4)/2147483647)/2.0
+                // obj.bufferMono.push(mono)
+                // var leftOnly=eightToThreeTwo(wav.data.samples,8*i)/2147483647-(((eightToThreeTwo(wav.data.samples,8*i)/2147483647)+eightToThreeTwo(wav.data.samples,8*i+4)/2147483647)/2.0)
+                // obj.bufferLeftOnly.push(leftOnly)
+                // var mono = Math.floor(((eightToThreeTwo(wav.data.samples,8*i)/2147483647)+eightToThreeTwo(wav.data.samples,8*i+4))/2)
+                // obj.bufferMono.push(mono)
+               
+                //obj.monoMean+=Math.abs(mono)/(obj.sampleLength)
+                //obj.sideMean+=Math.abs(leftOnly)/(obj.sampleLength)
             };
-                reader.onload = function(e) {
-                    console.log('entered reader')
-                    obj.arrayBuffer = this.result;               
-                    obj.eight = new Int8Array(obj.arrayBuffer)
-                    obj.onesix = new Int16Array(obj.eight.length/2)
-                    for (var i = 0; i<obj.eight.length/2; i++){
-                        obj.onesix[i]=((obj.eight[2*i])+(obj.eight[2*i+1]<<8))
-                    }
-                    obj.twofour = new Array(obj.eight.length/2)
-                    {
-                        obj.twofour[i]=((obj.eight[3*i])+(obj.eight[3*i+1]<<8)+(obj.eight[3*i+2]<<8<<8))
-                    }
+            var tempMax=0
+            for(var i = 0; i<obj.sampleLength; i++){
+                //var mono = Math.floor((obj.bufferLeft[i]+obj.bufferRight[i])/2)
+                var mono = ((obj.bufferLeft[i]+obj.bufferRight[i])/2)
+                //console.log(mono)
+                obj.mono.push(mono)
+                obj.bufferMono.push(mono)
+                var leftOnly=obj.bufferLeft[i]-mono
+                obj.bufferLeftOnly.push(leftOnly)
+                obj.leftOnly.push(leftOnly)
+                //console.log(obj.bufferLeftOnly)
+                if(Math.abs(obj.bufferLeft[i])>tempMax){
+                    tempMax=Math.abs(obj.bufferLeft[i])
+                }
+                if(Math.abs(obj.bufferRight[i])>tempMax){
+                    tempMax=Math.abs(obj.bufferRight[i])
+                }
+            }
+            obj.max=tempMax
+            
+            //wav.toBuffer()
+            // reader.readAsArrayBuffer(files[0]);
+            // reader.onerror = errorHandler;
+            // reader.onabort = function(e) {
+            // alert('File read cancelled');
+            // };
+            //     reader.onload = function(e) {
+            //         console.log('entered reader')
+            //         obj.arrayBuffer = this.result;               
+            //         obj.eight = new Int8Array(obj.arrayBuffer)
+                    
+                    //obj.onesix = new Int16Array(obj.eight.length/2)
+                    // for (var i = 0; i<obj.eight.length/2; i++){
+                    //     obj.onesix[i]=((obj.eight[2*i])+(obj.eight[2*i+1]<<8))
+                    // }
+                    // obj.twofour = new Array(obj.eight.length/2)
+                    // {
+                    //     obj.twofour[i]=((obj.eight[3*i])+(obj.eight[3*i+1]<<8)+(obj.eight[3*i+2]<<8<<8))
+                    // }
                     
                     //obj.bufferSampleRate = obj.eight[24]+((256+obj.eight[25])<<8)
-                    obj.bufferSampleRate = wav.fmt.sampleRate;
-                    obj.channels = eightToOneSix(obj.eight,22)
-                    obj.bitrate = eightToThreeTwo(obj.eight,28)/obj.bufferSampleRate/obj.channels*8
-                    obj.maxNumber = 0;
-                    obj.subchunk = eightToThreeTwo(obj.eight,20)
-                    obj.bitdepth = obj.bitrate/8;
-                    obj.sampleLength = (eightToThreeTwo(obj.eight,4)-36)/obj.bitdepth/obj.channels
-                    obj.bitsPerSample = eightToOneSix(obj.eight, 34)/obj.channels
+                    //obj.bufferSampleRate = wav.fmt.sampleRate;
+                    //obj.channels = eightToOneSix(obj.eight,22)
+                    //obj.bitrate = eightToThreeTwo(obj.eight,28)/obj.bufferSampleRate/obj.channels*8
+                    //obj.maxNumber = 0;
+                    //obj.subchunk = eightToThreeTwo(obj.eight,20)
+                    //obj.bitdepth = obj.bitrate/8;
+                    //obj.bufferSampleLength = (eightToThreeTwo(obj.eight,4)-36)/obj.bitdepth/obj.channels
+                    //obj.bitsPerSample = eightToOneSix(obj.eight, 34)/obj.channels
 
                     //var tempBuffer =new Int32Array(obj.sampleLength*4)
 
                     
-                    if(obj.bitrate==16 && obj.channels==2){
-                        for (var i=0; i<Math.ceil(obj.sampleLength); i++){
-                            obj.left = eightToOneSix(obj.eight,44+4*i)
-                            obj.right = eightToOneSix(obj.eight,44+4*i+2)
-                            obj.mono = (obj.left+obj.right)/(2)
-                            obj.leftOnly = obj.left-obj.mono
-                            obj.absLeft[i] = Math.abs(obj.left)
-                            obj.absRight[i] = Math.abs(obj.right)
-                            if(obj.maxNumber<obj.absLeft||obj.maxNumber<obj.absRight){
-                                (obj.left>obj.right) ? obj.maxNumber = obj.absLeft : obj.maxNumber = obj.absRight;
-                            }
-                            obj.bufferLeft.push(obj.left)
-                            obj.bufferRight.push(obj.right)
-                            obj.bufferMono.push(obj.mono)
-                            obj.bufferLeftOnly.push(obj.leftOnly)
-                            obj.monoMean+=Math.abs(obj.mono)/obj.sampleLength
-                            obj.sideMean+=Math.abs(obj.leftOnly)/obj.sampleLength
-                        };
-                    }
-                    else if (obj.bitrate==16 && obj.channels ==1){
+                    // if(obj.bitrate==16 && obj.channels==2){
+                    //     for (var i=0; i<Math.ceil(obj.bufferSampleLength); i++){
+                    //         obj.left = eightToOneSix(obj.eight,44+4*i)
+                    //         obj.right = eightToOneSix(obj.eight,44+4*i+2)
+                    //         obj.mono = (obj.left+obj.right)/(2)
+                    //         obj.leftOnly = obj.left-obj.mono
+                    //         obj.absLeft[i] = Math.abs(obj.left)
+                    //         obj.absRight[i] = Math.abs(obj.right)
+                    //         if(obj.maxNumber<obj.absLeft||obj.maxNumber<obj.absRight){
+                    //             (obj.left>obj.right) ? obj.maxNumber = obj.absLeft : obj.maxNumber = obj.absRight;
+                    //         }
+                    //         obj.bufferLeft.push(obj.left)
+                    //         obj.bufferRight.push(obj.right)
+                    //         obj.bufferMono.push(obj.mono)
+                    //         obj.bufferLeftOnly.push(obj.leftOnly)
+                    //         /*
+                    //         obj.monoMean+=Math.abs(obj.mono)/obj.bufferSampleLength
+                    //         obj.sideMean+=Math.abs(obj.leftOnly)/obj.bufferSampleLength
+                    //         */
+                    //     };
+                    // }
+                    // else if (obj.bitrate==16 && obj.channels ==1){
                         
-                        for (var i=0; i<Math.ceil(obj.sampleLength); i++){
-                            obj.left = (eightToOneSix(obj.eight,44+2*i))
-                            obj.absLeft = Math.abs(obj.left)
-                            if(obj.maxNumber<obj.absLeft){
-                                obj.maxNumber = obj.absLeft;
-                            }
-                            obj.bufferLeft.push(obj.left)
-                            obj.bufferRight.push(obj.left)
-                            obj.bufferMono.push(obj.left)
-                            obj.bufferLeftOnly.push(0)
-                            obj.monoMean+=Math.abs(obj.left)/obj.sampleLength
-                        };
-                    };
-                    if(obj.bitrate==24 && obj.channels ==2){
-                        for (var i=0; i<obj.sampleLength; i++){
-                            obj.left = (eightToTwoFour(obj.eight,44+6*i))
-                            obj.right = (eightToTwoFour(obj.eight,44+6*i+3))
-                            obj.absLeft = Math.abs(obj.left)
-                            obj.absRight = Math.abs(obj.right)
-                            obj.mono = (obj.left+obj.right)/(2)
-                            obj.leftOnly = obj.left-obj.mono
-                            if(obj.maxNumber<obj.absLeft||obj.maxNumber<obj.absRight){
-                                (obj.absLeft>obj.absRight) ? obj.maxNumber = obj.absLeft : obj.maxNumber = obj.absRight;
-                            }
-                            obj.bufferLeft.push(obj.left)
-                            obj.bufferRight.push(obj.right)
-                            obj.bufferMono.push(obj.mono)
-                            obj.bufferLeftOnly.push(obj.leftOnly)
-                            obj.monoMean+=Math.abs(obj.mono)/obj.sampleLength
-                            obj.sideMean+=Math.abs(obj.leftOnly)/obj.sampleLength
-                        }
-                    }
-                    else if(obj.bitrate==24 && obj.channels ==1){
-                        for (var i=0; i<obj.sampleLength; i++){
-                            obj.left = (eightToTwoFour(obj.eight,44+3*i))
-                            obj.absLeft = Math.abs(obj.left)
-                            if(obj.maxNumber<obj.absLeft){
-                                obj.maxNumber = obj.absLeft;
-                            }
-                            obj.bufferLeft.push(obj.left)
-                            obj.bufferRight.push(obj.left)
-                            obj.bufferMono.push(obj.left)
-                            obj.bufferLeftOnly.push(0)
-                            obj.monoMean+=Math.abs(obj.left)/obj.sampleLength
-                        }
-                    }
-                    if(obj.bitrate==32 && obj.channels==2){
-                        for (var i=0; i<obj.sampleLength; i++){
-                            obj.left = eightToThreeTwo(obj.eight,44+8*i)
-                            obj.right = eightToThreeTwo(obj.eight,44+8*i+4)
-                            obj.absLeft = Math.abs(obj.left)
-                            obj.absRight = Math.abs(obj.right)
-                            obj.mono = (obj.left+obj.right)/(2)
-                            obj.leftOnly = obj.left-obj.mono
-                            if(obj.maxNumber<obj.absLeft||obj.maxNumber<obj.absRight){
-                                (obj.absLeft>obj.absRight) ? obj.maxNumber = obj.absLeft : obj.maxNumber = obj.absRight;
-                            }
-                            obj.bufferLeft.push(obj.left)
-                            obj.bufferRight.push(obj.right)
-                            obj.bufferMono.push(obj.mono)
-                            obj.bufferLeftOnly.push(obj.leftOnly)
-                            obj.monoMean+=Math.abs(obj.mono)/obj.sampleLength
-                            obj.sideMean+=Math.abs(leftOnly)/obj.sampleLength
-                        };
-                    }
-                    else if (obj.bitrate==32 && obj.channels ==1){
-                        for (var i=0; i<obj.sampleLength; i++){
-                            obj.left = eightToThreeTwo(obj.eight,44+4*i)
-                            obj.absLeft = Math.abs(obj.left)
-                            if(obj.maxNumber<obj.absLeft){
-                                obj.maxNumber = obj.absLeft;
-                            }
-                            obj.bufferLeft.push(obj.left)
-                            obj.bufferRight.push(obj.left)
-                            obj.bufferMono.push(obj.left)
-                            obj.bufferLeftOnly.push(0)
-                            obj.monoMean+=Math.abs(obj.left)/obj.sampleLength
-                        };
-                    };
-                    obj.monoMean = obj.monoMean/obj.maxNumber
-                    obj.sideMean = obj.sideMean/obj.maxNumber
-                    console.log(obj.monoMean/obj.maxNumber)
-                    for (var i=0; i<obj.bufferLeft.length; i++){
+                    //     for (var i=0; i<Math.ceil(obj.bufferSampleLength); i++){
+                    //         obj.left = (eightToOneSix(obj.eight,44+2*i))
+                    //         obj.absLeft = Math.abs(obj.left)
+                    //         if(obj.maxNumber<obj.absLeft){
+                    //             obj.maxNumber = obj.absLeft;
+                    //         }
+                    //         obj.bufferLeft.push(obj.left)
+                    //         obj.bufferRight.push(obj.left)
+                    //         obj.bufferMono.push(obj.left)
+                    //         obj.bufferLeftOnly.push(0)
+                    //         /*
+                    //         obj.monoMean+=Math.abs(obj.left)/obj.bufferSampleLength
+                    //         */
+                    //     };
+                    // };
+                    // if(obj.bitrate==24 && obj.channels ==2){
+                    //     for (var i=0; i<obj.bufferSampleLength; i++){
+                    //         obj.left = (eightToTwoFour(obj.eight,44+6*i))
+                    //         obj.right = (eightToTwoFour(obj.eight,44+6*i+3))
+                    //         obj.absLeft = Math.abs(obj.left)
+                    //         obj.absRight = Math.abs(obj.right)
+                    //         obj.mono = (obj.left+obj.right)/(2)
+                    //         obj.leftOnly = obj.left-obj.mono
+                    //         if(obj.maxNumber<obj.absLeft||obj.maxNumber<obj.absRight){
+                    //             (obj.absLeft>obj.absRight) ? obj.maxNumber = obj.absLeft : obj.maxNumber = obj.absRight;
+                    //         }
+                    //         obj.bufferLeft.push(obj.left)
+                    //         obj.bufferRight.push(obj.right)
+                    //         obj.bufferMono.push(obj.mono)
+                    //         obj.bufferLeftOnly.push(obj.leftOnly)
+                    //         /*
+                    //         obj.monoMean+=Math.abs(obj.mono)/obj.bufferSampleLength
+                    //         obj.sideMean+=Math.abs(obj.leftOnly)/obj.bufferSampleLength
+                    //         */
+                    //     }
+                    // }
+                    // else if(obj.bitrate==24 && obj.channels ==1){
+                    //     for (var i=0; i<obj.bufferSampleLength; i++){
+                    //         obj.left = (eightToTwoFour(obj.eight,44+3*i))
+                    //         obj.absLeft = Math.abs(obj.left)
+                    //         if(obj.maxNumber<obj.absLeft){
+                    //             obj.maxNumber = obj.absLeft;
+                    //         }
+                    //         obj.bufferLeft.push(obj.left)
+                    //         obj.bufferRight.push(obj.left)
+                    //         obj.bufferMono.push(obj.left)
+                    //         obj.bufferLeftOnly.push(0)
+                    //         /*
+                    //         obj.monoMean+=Math.abs(obj.left)/obj.bufferSampleLength
+                    //         */
+                    //     }
+                    // }
+//                     if(obj.bitrate==32 && obj.channels==2){
+//                         for (var i=0; i<obj.bufferSampleLength; i++){
+//                             obj.left = eightToThreeTwo(obj.eight,44+8*i)
+//                             obj.right = eightToThreeTwo(obj.eight,44+8*i+4)
+//                             obj.absLeft = Math.abs(obj.left)
+//                             obj.absRight = Math.abs(obj.right)
+//                             obj.mono = (obj.left+obj.right)/(2)
+//                             obj.leftOnly = obj.left-obj.mono
+//                             if(obj.maxNumber<obj.absLeft||obj.maxNumber<obj.absRight){
+//                                 (obj.absLeft>obj.absRight) ? obj.maxNumber = obj.absLeft : obj.maxNumber = obj.absRight;
+//                             }
+//                             obj.bufferLeft.push(obj.left)
+//                             obj.bufferRight.push(obj.right)
+//                             obj.bufferMono.push(obj.mono)
+//                             obj.bufferLeftOnly.push(obj.leftOnly)
+//                             /*
+//                             obj.monoMean+=Math.abs(obj.mono)/obj.bufferSampleLength
+//                             obj.sideMean+=Math.abs(leftOnly)/obj.bufferSampleLength
+//                             */
+//                         };
+//                     }
+//                     else if (obj.bitrate==32 && obj.channels ==1){
+//                         for (var i=0; i<obj.bufferSampleLength; i++){
+//                             obj.left = eightToThreeTwo(obj.eight,44+4*i)
+//                             obj.absLeft = Math.abs(obj.left)
+//                             if(obj.maxNumber<obj.absLeft){
+//                                 obj.maxNumber = obj.absLeft;
+//                             }
+//                             obj.bufferLeft.push(obj.left)
+//                             obj.bufferRight.push(obj.left)
+//                             obj.bufferMono.push(obj.left)
+//                             obj.bufferLeftOnly.push(0)
+//                             /*
+//                             obj.monoMean+=Math.abs(obj.left)/obj.bufferSampleLength
+//                             */
+//                         };
+//                     };
+            
+//                     obj.monoMean = obj.monoMean/obj.maxNumber
+//                     obj.sideMean = obj.sideMean/obj.maxNumber
+//                     //console.log(obj.monoMean/obj.maxNumber)
+//                     for (var i=0; i<obj.bufferLeft.length; i++){
                         
-                        obj.bufferLeft[i]=(obj.bufferLeft[i])/obj.maxNumber;
-                        obj.bufferRight[i]=(obj.bufferRight[i])/obj.maxNumber;
-                        obj.bufferMono[i]=(obj.bufferMono[i]/obj.maxNumber);
-                        obj.bufferLeftOnly[i]=obj.bufferLeftOnly[i]/obj.maxNumber;
+//                         obj.bufferLeft[i]=(obj.bufferLeft[i])/obj.maxNumber;
+//                         obj.bufferRight[i]=(obj.bufferRight[i])/obj.maxNumber;
+//                         obj.bufferMono[i]=(obj.bufferMono[i]/obj.maxNumber);
+//                         obj.bufferLeftOnly[i]=obj.bufferLeftOnly[i]/obj.maxNumber;
                         
-                
-                        obj.monoVariance += Math.abs(Math.abs(obj.bufferMono[i])-obj.monoMean)/obj.sampleLength
-                        obj.sideVariance += Math.abs(Math.abs(obj.bufferLeftOnly[i])-obj.sideMean)/obj.sampleLength
-
-                    }; 
-                    /*
-                    for(var i in obj){
-                        if(obj[i]==null){
-                            delete obj[i]
-                        }
-                        else if (obj[i][0]==undefined){
-                            delete obj[i]
-                        }
-                    }
-                    */
+//                 /*
+//                         obj.monoVariance += Math.abs(Math.abs(obj.bufferMono[i])-obj.monoMean)/obj.bufferSampleLength
+//                         obj.sideVariance += Math.abs(Math.abs(obj.bufferLeftOnly[i])-obj.sideMean)/obj.bufferSampleLength
+// */
+//                     }; 
                     
-                    obj.online = true;    
-            }
-        }
+//                     /*
+//                     for(var i in obj){
+//                         if(obj[i]==null){
+//                             delete obj[i]
+//                         }
+//                         else if (obj[i][0]==undefined){
+//                             delete obj[i]
+//                         }
+//                     }
+//                     */
+                  
+                    
+                   obj.online = true;    
+//             }
+       }
         
 };
+
 var referenceTrackSelect = function(evt){
     document.getElementById('referenceFile').addEventListener('change',readFile,false);
     function readFile(evt,referencObj){
@@ -684,64 +858,7 @@ function setTargetAddress(){
     }
 };
 
-function cubicSpline(x,y,ratio){
 
-    var n=x.length-1;
-    var h = new Float32Array(n);
-    var newLength = y.length*ratio;
-    for (var i=0; i<n; i++){
-        h[i]=x[i+1]-x[i];
-    };
-    var al = new Float32Array(n-1);
-    for (var i=1; i<n; i++){
-        al[i]=3*((y[i+1]-y[i])/h[i] - (y[i]-y[i-1])/h[i-1]);
-    };
-    al[0]=0;
-    var l = new Float32Array(n+1);
-    var u = new Float32Array(n+1);
-    var z = new Float32Array(n+1);
-    l.fill(1);
-    u.fill(0);
-    z.fill(0);
-    for (var i=1; i<n; i++){
-        l[i] = 2*(x[i+1]-x[i-1]) - h[i-1]*u[i-1];
-        u[i] = h[i]/l[i];
-        z[i] = (al[i] - h[i-1]*z[i-1])/l[i];
-    };
-    var b = new Float32Array(n+1);
-    var c = new Float32Array(n+1);
-    var d = new Float32Array(n+1);
-    l.fill(0);
-    u.fill(0);
-    z.fill(0);
-    for (var i = n-1; i>=0; i--){
-        c[i] = z[i] - u[i]*c[i+1];
-        b[i] = (y[i+1]-y[i])/h[i] - h[i]*(c[i+1] + 2*c[i])/3;
-        d[i] = (c[i+1]-c[i])/(3*h[i]);
-    };
-    var result = [y, b, c, d];
-    var xs = new Float32Array(newLength);
-    var ys = new Float32Array(newLength);
-    var coi;
-    for(var i =0; i<newLength; i++){
-        xs[i]=i/ratio;
-        coi=Math.floor(i/ratio);
-        ys[i]=result[0][coi]+result[1][coi]*(xs[i]-coi)+result[2][coi]*(xs[i]-coi)**2+result[3][coi]*(xs[i]-coi)**3;
-    };
-    return ys;
-};
-//returns a new array with a given sample rate
-function SRConverter(origArray,origSR,newSR){
-    var ratio = newSR/origSR;
-    var origLength = origArray.length;
-    var x = new Float32Array(origArray.length);
-    for (var i =0; i<origLength; i++){
-        x[i]=i;
-    };
-    var y = origArray;
-    var newArray = cubicSpline(x,y,ratio);
-    return newArray;
-};
 
 function abortRead() {
     reader.abort();
@@ -792,71 +909,89 @@ var finalFrontier = new Promise(function(resolve,reject){
 */
 function reconstruct(mainObj,referenceObj,desiredSampleRate){
     document.getElementById('console').innerHTML='reconstruct';
-    
-    
     function ratio(bins){
         this.mono=new Array(bins);
         this.side=new Array(bins);
     };
-    console.log('referenceObj : '+referenceObj)
-    console.log('mainObj : '+mainObj)
+    //console.log('referenceObj : '+stringifyObject(referenceObj))
+    //console.log('mainObj : '+stringifyObject(mainObj))
     var ratio = new ratio(barkscale.length);
-    
     for (var i =0; i<barkscale.length; i++){
         document.getElementById('console').innerHTML=i+'/'+barkscale.length;
         ratio.mono[i]=referenceObj.monoDeviationArray[i]/mainObj.monoDeviationArray[i];
         ratio.side[i]=referenceObj.sideDeviationArray[i]/mainObj.sideDeviationArray[i];
     };
+    //console.log('ratio matrix : ',stringifyObject(ratio))
     function soundData(){
-        this.left = new Array(mainObj.bufferLeftOnly.length);
-        this.right = new Array(mainObj.bufferLeftOnly.length);
+        this.left = new Array(mainObj.leftOnly.length);
+        this.right = new Array(mainObj.leftOnly.length);
         this.left.fill(0);
         this.right.fill(0);
         this.interlaced=new Array();
     };
-
     var data= new soundData;
-
-
+    var tempMonoBuffer=[0,0,0,0,0,0,0,0]
+    var tempSideBuffer=[0,0,0,0,0,0,0,0]
     for (var j =0; j<mainObj.bufferLeftOnly.length; j++){
     var tempMono = 0;
     var tempSide = 0;
+    
         for(var i = 0; i<barkscale.length; i++){
             if(mainObj.monoMatrix[i][j]>=0){
-                tempMono += Math.floor((mainObj.monoMatrix[i][j]-mainObj.monoMeanArray[i])*ratio.mono[i]+referenceObj.monoMeanArray[i])
+                //tempMono += Math.floor((mainObj.monoMatrix[i][j]-mainObj.monoMeanArray[i])*ratio.mono[i]+referenceObj.monoMeanArray[i])
+                tempMono += ((mainObj.monoMatrix[i][j]-mainObj.monoMeanArray[i])*ratio.mono[i]+referenceObj.monoMeanArray[i])
                 if(mainObj.sideMatrix[i][j]>=0){
-                    tempSide += Math.floor((mainObj.sideMatrix[i][j]-mainObj.sideMeanArray[i])*ratio.side[i]+referenceObj.sideMeanArray[i])
+                    // tempSide += Math.floor((mainObj.sideMatrix[i][j]-mainObj.sideMeanArray[i])*ratio.side[i]+referenceObj.sideMeanArray[i])
+                    tempSide += ((mainObj.sideMatrix[i][j]-mainObj.sideMeanArray[i])*ratio.side[i]+referenceObj.sideMeanArray[i])
                 }
                 else if(mainObj.sideMatrix[i][j]<0){
-                    tempSide += Math.floor((mainObj.sideMatrix[i][j]+mainObj.sideMeanArray[i])*ratio.side[i]-referenceObj.sideMeanArray[i])
+                    //tempSide += Math.floor((mainObj.sideMatrix[i][j]+mainObj.sideMeanArray[i])*ratio.side[i]-referenceObj.sideMeanArray[i])
+                    tempSide += ((mainObj.sideMatrix[i][j]+mainObj.sideMeanArray[i])*ratio.side[i]-referenceObj.sideMeanArray[i])
                 }  
             }
             else if(mainObj.monoMatrix[i][j]<0){
-                tempMono += Math.floor((mainObj.monoMatrix[i][j]+mainObj.monoMeanArray[i])*ratio.mono[i]-referenceObj.monoMeanArray[i])
+                //tempMono += Math.floor((mainObj.monoMatrix[i][j]+mainObj.monoMeanArray[i])*ratio.mono[i]-referenceObj.monoMeanArray[i])
+                tempMono += ((mainObj.monoMatrix[i][j]+mainObj.monoMeanArray[i])*ratio.mono[i]-referenceObj.monoMeanArray[i])
                 if(mainObj.sideMatrix[i][j]>=0){
-                    tempSide += Math.floor((mainObj.sideMatrix[i][j]-mainObj.sideMeanArray[i])*ratio.side[i]+referenceObj.sideMeanArray[i])
+                    //tempSide += Math.floor((mainObj.sideMatrix[i][j]-mainObj.sideMeanArray[i])*ratio.side[i]+referenceObj.sideMeanArray[i])
+                    tempSide += ((mainObj.sideMatrix[i][j]-mainObj.sideMeanArray[i])*ratio.side[i]+referenceObj.sideMeanArray[i])
                 }
                 else if(mainObj.sideMatrix[i][j]<0){
-                    tempSide += Math.floor((mainObj.sideMatrix[i][j]+mainObj.sideMeanArray[i])*ratio.side[i]-referenceObj.sideMeanArray[i])
+                    //tempSide += Math.floor((mainObj.sideMatrix[i][j]+mainObj.sideMeanArray[i])*ratio.side[i]-referenceObj.sideMeanArray[i])
+                    tempSide += ((mainObj.sideMatrix[i][j]+mainObj.sideMeanArray[i])*ratio.side[i]-referenceObj.sideMeanArray[i])
                 }  
             } 
             document.getElementById('console').innerHTML=j+'/'+mainObj.bufferLeftOnly.length+'-'+i+'/'+barkscale.length;   
         }
-    data.left[j]=tempMono+tempSide
-    data.right[j]=tempMono-tempSide
+    tempMonoBuffer.splice(0,1)
+    tempSideBuffer.splice(0,1)
+    tempMonoBuffer.push(tempMono)
+    tempSideBuffer.push(tempSide)
+    var tempMonoBufferAverage=0
+    var tempSideBufferAverage=0
+    for (var i =0; i<tempMonoBuffer.length; i++){
+        tempMonoBufferAverage+=tempMonoBuffer[i]
+        tempSideBufferAverage+=tempSideBuffer[i]
+    }
+    //data.left[j]=tempMono+tempSide
+    //data.right[j]=tempMono-tempSide
+    data.left[j]=tempMonoBufferAverage+tempSideBufferAverage
+    data.right[j]=tempMonoBufferAverage-tempSideBufferAverage
     }
     /*
     var mainWav = new WaveFile(fs.readFileSync(mainObj.filePath.path))
     var refWav = new WaveFile(fs.readFileSync(refObj.filePath.path))
     */
-    var newLeft = SRConverter(data.left,mainObj.bufferSampleRate,desiredSampleRate);
-    var newRight = SRConverter(data.right,mainObj.bufferSampleRate,desiredSampleRate);
-    
+    //var newLeft = SRConverter(data.left,44100,desiredSampleRate);
+    //var newRight = SRConverter(data.right,44100,desiredSampleRate);
+    var newLeft=data.left
+    var newRight=data.right
     for(var i=0; i<newLeft.length; i++){
+        //console.log(newLeft[i])
         data.interlaced.push(newLeft[i])
         data.interlaced.push(newRight[i])
     }
-    var fullPathDirectory=path.dirname(mainObj.filePath)+'/masterd_files/'
+    var fullPathDirectory=path.dirname(mainObj.filePath)+'/mastered_files/'
   
         try {
             fs.mkdirSync(fullPathDirectory)
@@ -865,13 +1000,26 @@ function reconstruct(mainObj,referenceObj,desiredSampleRate){
                 document.getElementById('console').innerHTML=err
             }
           }
-    
+    var max = 0
+    for(var i=0; i<data.interlaced.length; i++){
+        if(max<Math.abs(data.interlaced[i])){
+            max=data.interlaced[i]
+        }
+    }
+    for(var i=0; i<data.interlaced.length; i++){
+
+        data.interlaced[i]=Math.floor((data.interlaced[i]/max)*16384/2)
+        //data.interlaced[i]=(data.interlaced[i]*16384/max)
+        //data.interlaced[i]=Math.floor((data.interlaced[i]/max)*mainObj.max)
+    }
+    //console.log(data.interlaced)
     var fullPathName=fullPathDirectory+path.basename(mainObj.filePath)
     var wav = new WaveFile()
-    wav.fromScratch(2,desiredSampleRate,'32f',[data.interlaced])
+    wav.fromScratch(2,desiredSampleRate,'16',[data.interlaced])
     console.log(fullPathName)
     fs.writeFileSync(fullPathName,wav.toBuffer())
-    console.log('check the file dude')
+    //document.getElementById('console').innerHTML='check the file dude'
+    document.getElementById('console').innerHTML='created file : '+fullPathName
     var arrayForNumpy = new Array(newLeft.length);
     for (var i =0; i<newLeft.length; i++){
         arrayForNumpy[i]=[newLeft[i],newRight[i]];
@@ -879,7 +1027,7 @@ function reconstruct(mainObj,referenceObj,desiredSampleRate){
     mastered ={
         float:true,
         symmetric:true,
-        bitDepth:32,
+        bitDepth:16,
         sampleRate:desiredSampleRate,
         channelData:[
             newLeft,
@@ -900,7 +1048,8 @@ function reconstruct(mainObj,referenceObj,desiredSampleRate){
 
 var readButtonPressed = function(){
     //tabulation()
-    var desiredSampleRate = 48000
+    //var desiredSampleRate = 48000
+    var desiredSampleRate = 44100
     document.getElementById('console').innerHTML=('initiating json data sending')
     var JSONdata = reconstruct(mainObj,referenceObj,desiredSampleRate);
     /*
