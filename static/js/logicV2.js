@@ -19,7 +19,7 @@ var cancelButton = document.getElementById('cancel');
 //var wav = require('wav')
 var pcm = require('pcm')
 var wav = require('node-wav')
-
+remote.getCurrentWindow().toggleDevTools()
 referenceTrackButton.style.display='none'
 
 //consoleContainer.style.display='none'
@@ -79,6 +79,7 @@ function LP(freq,sr){
         return this.buf0
       }
       else if(this.mode =12){
+          console.log(this.buf1)
           return this.buf1
       }
       else if(this.mode =24){
@@ -120,7 +121,9 @@ function LP(freq,sr){
       return (sample - this.buf0)
     }
     else if(this.mode =12){
-        return (sample - this.buf1)
+        var returnVal=sample - this.buf1
+        //console.log('hp:',sample)
+        return (returnVal)
     }
     else if(this.mode =24){
         return (sample - this.buf3)
@@ -138,7 +141,9 @@ function LP(freq,sr){
     this.hp.setMode(mode)
   }
   BAND.prototype.process=function(sample){
-    return (this.lp.process(this.hp.process(sample)))
+    var returnVal=this.lp.process(this.hp.process(sample))
+    //console.log('band :',returnVal)
+    return (returnVal)
   }
   var barkscale = [175,2750,6600]
   function FOURBAND(sr){
@@ -157,7 +162,7 @@ function LP(freq,sr){
     this.mode=mode
   }
   FOURBAND.prototype.process=function(sample){
-    //return (this.high.process(sample)+this.mid.process(sample)+this.midlow.process(sample)+this.low.process(sample))
+    
     return [this.low.process(sample),this.midlow.process(sample),this.mid.process(sample),this.high.process(sample)]
   }
   
@@ -184,14 +189,32 @@ function LP(freq,sr){
   MATCH.prototype.process=function(sample){
     this.buffer.slice(0,1)
     if(sample>0){
-      this.buffer.push(
-        ((sample-this.userMean)*this.refDev/this.userDev)+this.userDev
-      )
+        if(this.userDev==0){
+            this.buffer.push(
+                sample-this.userMean+this.refMean
+            )
+        }
+        else{
+            this.buffer.push(
+                ((sample-this.userMean)*this.refDev/this.userDev)+this.userDev
+              )
+        }
+      
     }
     else if (sample<0){
-      this.buffer.push(
-        ((sample+this.userMean)*this.refDev/this.userDev)+this.userDev
-      )
+        if(this.userDev==0){
+            this.buffer.push(
+                sample+this.userMean-this.refMean
+            )
+        }
+        else{
+            this.buffer.push(
+                ((sample+this.userMean)*this.refDev/this.userDev)-this.refMean
+            )
+        }
+    }
+    else if(sample==0){
+        this.buffer.push(0)
     }
     var average = 0;
     for (var i =0; i<this.buffer.length; i++){
@@ -261,7 +284,7 @@ function LP(freq,sr){
     for(var i = 0; i< array.length; i++){
       var val = Math.abs(array[i])
       this.dev+=Math.abs(val-this.mean)/array.length
-      console.log('pushing to analyzer buffer : ', pad(i/array.length,6,0))
+      //console.log('pushing to analyzer buffer : ', pad(i/array.length,6,0))
       document.getElementById('console').innerHTML='pushing to analyzer buffer : ', pad(i/array.length,6,0)
     }
     return({mean:this.mean,dev:this.dev})
@@ -292,20 +315,22 @@ function LP(freq,sr){
     var smla=[]
     var sla=[]
     for (var i =0; i<mid.length; i++){
-      console.log('pushing to mid/side buffer : ', pad(i/mid.length,6,0))
-      document.getElementById('console').innerHTML='pushing to mid/side buffer : ', pad(i/mid.length,6,0))
-      var midsample=this.mfb.process(mid)
+      //console.log('pushing to mid/side buffer : ', pad(i/mid.length,6,0))
+      //document.getElementById('console').innerHTML='pushing to mid/side buffer : ', pad(i/mid.length,6,0)
+      //console.log(mid[i])
+      var midsample=this.mfb.process(mid[i])
+      
       mla.push(midsample[0])
       mmla.push(midsample[1])
       mma.push(midsample[2])
       mha.push(midsample[3])
-  
-      var sidesample=this.sfb.process(side)
+    
+      var sidesample=this.sfb.process(side[i])
       sla.push(sidesample[0])
       smla.push(sidesample[1])
       sma.push(sidesample[2])
       sha.push(sidesample[3])
-      
+      console.log('mid [low,midlow,mid,high] / side [low,midlow,mid,high]: ',midsample,sidesample)
     }
     var tempObj={
       mh:this.mh.process(mha),
@@ -670,11 +695,11 @@ HP.prototype.output=function(mode){
 
 function track(){
     track.prototype.filePath = null;
-    track.prototype.bufferLeft=new Array();
-    track.prototype.bufferRight=new Array();
-    track.prototype.bufferMono=new Array();
-    track.prototype.bufferRightOnly=new Array();
-    track.prototype.bufferLeftOnly=new Array();
+    track.prototype.bufferLeft=[];
+    track.prototype.bufferRight=[];
+    track.prototype.bufferMono=[];
+    track.prototype.bufferRightOnly=[];
+    track.prototype.bufferLeftOnly=[];
     track.prototype.sampleRate=0;
     track.prototype.maxNumber=0;
     track.prototype.monoMean=0;
@@ -700,23 +725,23 @@ function track(){
     track.prototype.eight=null;
     track.prototype.onesix=null;
     track.prototype.twofour=null;
-    // track.prototype.monoHPArray=new Array(barkscale.length);
-    // track.prototype.sideHPArray=new Array(barkscale.length);
-    // track.prototype.monoLPArray=new Array(barkscale.length);
-    // track.prototype.sideLPArray=new Array(barkscale.length);
-    // track.prototype.monoMatrix=new Array(barkscale.length+1);
-    // track.prototype.sideMatrix=new Array(barkscale.length+1);
-    // track.prototype.monoMeanArray=new Array(barkscale.length+1);
-    // track.prototype.sideMeanArray=new Array(barkscale.length+1);
-    // track.prototype.monoDeviationArray=new Array(barkscale.length+1);
-    // track.prototype.sideDeviationArray=new Array(barkscale.length+1);
+    track.prototype.monoHPArray=new Array(barkscale.length);
+    track.prototype.sideHPArray=new Array(barkscale.length);
+    track.prototype.monoLPArray=new Array(barkscale.length);
+    track.prototype.sideLPArray=new Array(barkscale.length);
+    track.prototype.monoMatrix=new Array(barkscale.length+1);
+    track.prototype.sideMatrix=new Array(barkscale.length+1);
+    track.prototype.monoMeanArray=new Array(barkscale.length+1);
+    track.prototype.sideMeanArray=new Array(barkscale.length+1);
+    track.prototype.monoDeviationArray=new Array(barkscale.length+1);
+    track.prototype.sideDeviationArray=new Array(barkscale.length+1);
     track.prototype.newMatrix = function(){
         //this.mono = SRConverter(this.bufferMono,this.bufferSampleRate,44100)
         //this.leftOnly=SRConverter(this.bufferLeftOnly,this.bufferSampleRate,44100)
-        this.sampleLength=this.mono.length
+        this.sampleLength=this.bufferMono.length
         for (var i =0; i<barkscale.length+1; i++){
-            this.monoMatrix[i] =new Array(this.mono.length);
-            this.sideMatrix[i] = new Array(this.mono.length);
+            this.monoMatrix[i] =new Array(this.bufferMono.length);
+            this.sideMatrix[i] = new Array(this.bufferMono.length);
             this.monoMeanArray[i]=0.0
             this.sideMeanArray[i]=0.0
             this.monoDeviationArray[i]=0.0
@@ -746,12 +771,12 @@ function track(){
                     //this.sideMean+=Math.floor(Math.abs(this.leftOnly[j])/this.sampleLength)
                     this.monoMean+=(Math.abs(this.bufferMono[j])/this.sampleLength)
                     //console.log(Math.abs(this.leftOnly[j]))
-                    this.sideMean+=(Math.abs(this.leftOnly[j])/this.sampleLength)
+                    this.sideMean+=(Math.abs(this.bufferLeftOnly[j])/this.sampleLength)
                     
                     var monoLP = this.monoLPArray[i]
                     var sideLP = this.sideLPArray[i]
-                    var tempMono =monoLP.process(this.mono[j])
-                    var tempSide =sideLP.process(this.leftOnly[j])
+                    var tempMono =monoLP.process(this.bufferMono[j])
+                    var tempSide =sideLP.process(this.bufferLeftOnly[j])
                     this.monoMatrix[i][j]=tempMono
                     this.sideMatrix[i][j]=tempSide
                     this.monoMeanArray[i]+=Math.abs(tempMono)/this.sampleLength
@@ -764,8 +789,8 @@ function track(){
                     document.getElementById('console').innerHTML='analyzing : '+k+'/'+analysisLength
                     var monoHP = this.monoHPArray[i-1]
                     var sideHP = this.sideHPArray[i-1]
-                    var tempMono =monoHP.process(this.mono[j])
-                    var tempSide =sideHP.process(this.leftOnly[j])
+                    var tempMono =monoHP.process(this.bufferMono[j])
+                    var tempSide =sideHP.process(this.bufferLeftOnly[j])
                     this.monoMatrix[i][j]=tempMono
                     this.sideMatrix[i][j]=tempSide
                     this.monoMeanArray[i]+=Math.abs(tempMono)/this.sampleLength
@@ -782,14 +807,14 @@ function track(){
                     var sideLP = this.sideLPArray[i]
                     //console.log(this.mono[j])
 
-                    var tempMono = monoLP.process(monoHP.process(this.mono[j]))
-                    var tempSide = sideLP.process(sideHP.process(this.leftOnly[j]))
+                    var tempMono = monoLP.process(monoHP.process(this.bufferMono[j]))
+                    var tempSide = sideLP.process(sideHP.process(this.bufferLeftOnly[j]))
                     this.monoMatrix[i][j]=tempMono
                     this.sideMatrix[i][j]=tempSide
                     this.monoMeanArray[i]+=Math.abs(tempMono)/this.sampleLength
                     this.sideMeanArray[i]+=Math.abs(tempSide)/this.sampleLength
-                    this.monoVariance += Math.abs(Math.abs(this.mono[i])-this.monoMean)/this.sampleLength
-                    this.sideVariance += Math.abs(Math.abs(this.leftOnly[i])-this.sideMean)/this.sampleLength
+                    this.monoVariance += Math.abs(Math.abs(this.bufferMono[i])-this.monoMean)/this.sampleLength
+                    this.sideVariance += Math.abs(Math.abs(this.bufferLeftOnly[i])-this.sideMean)/this.sampleLength
                     //console.log(tempMono)
                     k++
                 }
@@ -831,11 +856,11 @@ function reset(){
 
     mainObj = new track()
     referenceObj = new track()
-    referenceObj.monoMeanArray=[0.042045691939235255, 0.30350496273493044, 0.11162788789494214, 0.008448073265478086]
-    referenceObj.monoDeviationArray=[0.05534535221208015, 0.3960832520494717, 0.14692152044358975, 0]
-    referenceObj.sideMeanArray=[0.0024129038023947683, 0.029907691106377872, 0.011327437907067852, 0.0008545722599771934]
-    referenceObj.sideDeviationArray=[0.0031832037448466218, 0.039556932569829624, 0.015011548049436968, 0]
-    referenceObj.online=true
+    // referenceObj.monoMeanArray=[0.042045691939235255, 0.30350496273493044, 0.11162788789494214, 0.008448073265478086]
+    // referenceObj.monoDeviationArray=[0.05534535221208015, 0.3960832520494717, 0.14692152044358975, 0]
+    // referenceObj.sideMeanArray=[0.0024129038023947683, 0.029907691106377872, 0.011327437907067852, 0.0008545722599771934]
+    // referenceObj.sideDeviationArray=[0.0031832037448466218, 0.039556932569829624, 0.015011548049436968, 0]
+    // referenceObj.online=true
     originalTrackButton.style.display='block'
     referenceTrackButton.style.display='block'
     readButton.style.display='none'
@@ -885,23 +910,21 @@ function formerFileSelect(evt,obj){
 
             //console.log(wav)
             wavInfo.toBitDepth(16)
-            
+            var stereo=true
             pcm.getPcmData(filepath,{
                 stereo:stereo,
                 sampleRate:wavInfo.fmt.sampleRate
             },function(sample,channel){
-                //console.log(sample)
-
-                document.getElementById('console').innerHTML='recording : '+ i
-                if(tempMax<Math.abs(sample)){
-                    tempMax=Math.abs(sample)
+                
+                if(obj.max<Math.abs(sample)){
+                    obj.max=Math.abs(sample)
                 }
                 if(channel==0){
                     obj.bufferLeft.push(sample)
                 }
                 if(channel==1){
                     obj.bufferRight.push(sample)
-                    i++
+                  
                 }
             
             },function(err,output){
@@ -911,23 +934,13 @@ function formerFileSelect(evt,obj){
                 //console.log(output)
                 for(var i = 0; i<obj.sampleLength+1; i++){
                     document.getElementById('console').innerHTML='recording : '+i
-                    //var mono = Math.floor((obj.bufferLeft[i]+obj.bufferRight[i])/2)
                     var mono = ((obj.bufferLeft[i]+obj.bufferRight[i])/2)
-                    //console.log(mono)
-                    obj.mono.push(mono)
                     obj.bufferMono.push(mono)
                     var leftOnly=obj.bufferLeft[i]-mono
                     obj.bufferLeftOnly.push(leftOnly)
-                    obj.leftOnly.push(leftOnly)
-                    //console.log(obj.bufferLeftOnly)
-                    if(Math.abs(obj.bufferLeft[i])>tempMax){
-                        tempMax=Math.abs(obj.bufferLeft[i])
-                    }
-                    if(Math.abs(obj.bufferRight[i])>tempMax){
-                        tempMax=Math.abs(obj.bufferRight[i])
-                    }
+
                 }
-                obj.max=tempMax
+                
                 obj.enterTheMatrix(barkscale)
                 obj.online = true;   
             })
@@ -950,6 +963,9 @@ function fileSelect(evt,obj){
         let right = result.channelData[1].slice()
         let mono = []
         let leftOnly = []
+
+
+
         for (var i = 0; i<left.length; i++){
             //console.log(i/left.length)
             mono.push((left[i]+right[i]/2))
@@ -960,16 +976,30 @@ function fileSelect(evt,obj){
         console.log(stats)
         var squwbs = new SQUWBS(result.sampleRate)
         squwbs.setUser(stats)
-        //squwbs.process(mono,leftOnly)
+        var interlaced = []
         for(var i =0; i<left.length; i++){
+            squwbs.process(mono,leftOnly)
             var temp=squwbs.process(left[i],right[i])
+            var temp = squwbs.process
             console.log(left[i])
             left[i]=temp.left
             right[i]=temp.right
+            //interlaced.push(temp.left)
+            //interlaced.push(temp.right)
         }
-        var encoded=wav.encode([left,right],{sampleRate:result.sampleRate, float:true, bitDepth:32}).slice()
-        
-        
+
+        //var wf=new WaveFile()
+        //wf.fromScratch(2,result.sampleRate,'32f',interlaced)
+        //wf.toBitDepth(16)
+        //var encoded= wf.toBuffer()
+        //var encoded=wav.encode([left,right],{sampleRate:result.sampleRate, float:true, bitDepth:64}).slice()
+        var encoded=wav.encode([left,right],{sampleRate:result.sampleRate, float:true, bitDepth:64}).slice()
+        var fullPathDirectory=path.dirname(mainObj.filePath)+'/mastered_files/'
+        var fullPathName=fullPathDirectory+path.basename(mainObj.filePath)
+        //console.log(fullPathName)
+        fs.writeFileSync(fullPathName,encoded)
+        //document.getElementById('console').innerHTML='check the file dude'
+        document.getElementById('console').innerHTML='created file : '+fullPathName    
     }
        
 };
@@ -995,16 +1025,16 @@ function originalTrackSelect(evt){
     document.getElementById('originalFile').addEventListener('change',readFile,false);
     function readFile(evt){
         fileSelect(evt,mainObj)
-        document.getElementById('console').innerHTML=path.basename(mainObj.filePath)+ ' has been selected.'
-        originalTrackButton.style.display='none'
-        if(referenceObj.online==true){
-            //mainObj.enterTheMatrix(barkscale)
-            //referenceObj.enterTheMatrix(barkscale)
-            // originalTrackButton.style.display='none'
-            referenceTrackButton.style.display='none'
-            readButton.style.display='block'
-            reconstruct()
-        }
+        // document.getElementById('console').innerHTML=path.basename(mainObj.filePath)+ ' has been selected.'
+        // originalTrackButton.style.display='none'
+        // if(referenceObj.online==true){
+        //     //mainObj.enterTheMatrix(barkscale)
+        //     //referenceObj.enterTheMatrix(barkscale)
+        //     // originalTrackButton.style.display='none'
+        //     referenceTrackButton.style.display='none'
+        //     readButton.style.display='block'
+        //     //reconstruct()
+        // }
     }
 };
 
@@ -1091,8 +1121,8 @@ function reconstruct(mainObj,referenceObj,desiredSampleRate){
     };
     //console.log('ratio matrix : ',stringifyObject(ratio))
     function soundData(){
-        this.left = new Array(mainObj.leftOnly.length);
-        this.right = new Array(mainObj.leftOnly.length);
+        this.left = new Array(mainObj.bufferLeftOnly.length);
+        this.right = new Array(mainObj.bufferLeftOnly.length);
         this.left.fill(0);
         this.right.fill(0);
         this.interlaced=new Array();
@@ -1188,10 +1218,11 @@ function reconstruct(mainObj,referenceObj,desiredSampleRate){
     }
     console.log(data.interlaced)
     var fullPathName=fullPathDirectory+path.basename(mainObj.filePath)
-    var wav = new WaveFile()
+    //var wav = new WaveFile()
     //wav.fromScratch(2,desiredSampleRate,'16',[data.interlaced])
-    wav.fromScratch(2,desiredSampleRate,'32f',[data.interlaced])
-    wav.toBitDepth(16)
+   // wav.fromScratch(2,desiredSampleRate,'32f',[data.interlaced])
+
+    //wav.toBitDepth(16)
     var string=typeof(wav.toBuffer())
     console.log(string)
     //console.log(fullPathName)
